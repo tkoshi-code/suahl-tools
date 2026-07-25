@@ -139,6 +139,29 @@
           </div>
         </div>
 
+        <div class="starter-import">
+          <div class="starter-import__text">
+            <strong>初級スターター</strong>
+            <span>J-POP・アニメ・洋楽の定番曲</span>
+          </div>
+          <button
+            class="starter-import__button"
+            type="button"
+            :disabled="starterLoading"
+            @click="addStarterSet"
+          >
+            {{ starterLoading ? '読込中...' : 'JSONから追加' }}
+          </button>
+        </div>
+        <p
+          v-if="starterMessage"
+          class="starter-message"
+          :class="{ 'starter-message--error': starterError }"
+          role="status"
+        >
+          {{ starterMessage }}
+        </p>
+
         <div v-if="S.tracks.length === 0" class="empty-state empty-state--library">
           Spotifyの曲URLと答えを登録してください
         </div>
@@ -153,7 +176,7 @@
             <span class="track-row__number">{{ index + 1 }}</span>
             <div class="track-row__body">
               <strong>{{ track.answer }}</strong>
-              <span>{{ playedTrackIds.includes(track.id) ? '出題済み' : '未出題' }}</span>
+              <span>{{ trackMeta(track) }}</span>
             </div>
             <button class="set-button" type="button" @click="setTrack(track)">セット</button>
             <button class="row-icon-button" type="button" aria-label="曲を編集" title="編集" @click="editTrack(track)">
@@ -201,6 +224,7 @@ const emit = defineEmits(['back'])
 
 const STORAGE_KEY = 'piyopiyo_spotify_intro_v1'
 const CHANNEL_NAME = 'piyopiyo_spotify_intro_channel_v1'
+const STARTER_DATA_URL = `${import.meta.env.BASE_URL}data/spotify-intro-starter.json`
 const MIN_SECONDS = 3
 const MAX_SECONDS = 30
 
@@ -219,6 +243,19 @@ function normalizeStoredTrack(track) {
     spotifyId: parsed.id,
     url: parsed.url,
     answer: answer.slice(0, 100),
+    catalogId: String(track.catalogId || '').trim().slice(0, 100),
+    title: String(track.title || '').trim().slice(0, 100),
+    artist: String(track.artist || '').trim().slice(0, 100),
+    difficulty: ['easy', 'normal', 'hard'].includes(track.difficulty) ? track.difficulty : '',
+    category: String(track.category || '').trim().slice(0, 30),
+    decade: String(track.decade || '').trim().slice(0, 20),
+    recommendedSeconds: track.recommendedSeconds !== null
+      && track.recommendedSeconds !== undefined
+      && track.recommendedSeconds !== ''
+      && Number.isFinite(Number(track.recommendedSeconds))
+      ? Math.min(MAX_SECONDS, Math.max(MIN_SECONDS, Math.round(Number(track.recommendedSeconds))))
+      : null,
+    note: String(track.note || '').trim().slice(0, 200),
   }
 }
 
@@ -257,6 +294,9 @@ const isPlaying = ref(false)
 const hasPlayed = ref(false)
 const answerRevealed = ref(false)
 const remainingSeconds = ref(S.introSeconds)
+const starterLoading = ref(false)
+const starterMessage = ref('')
+const starterError = ref(false)
 
 let embedController = null
 let countdownTimer = null
@@ -291,6 +331,80 @@ function normalizeDuration() {
   if (!isPlaying.value) remainingSeconds.value = S.introSeconds
 }
 
+function trackMeta(track) {
+  const history = playedTrackIds.value.includes(track.id) ? '出題済み' : '未出題'
+  const metadata = [
+    track.category,
+    track.decade,
+    track.recommendedSeconds ? `推奨${track.recommendedSeconds}秒` : '',
+  ].filter(Boolean)
+  return [history, ...metadata].join(' · ')
+}
+
+async function addStarterSet() {
+  starterLoading.value = true
+  starterMessage.value = ''
+  starterError.value = false
+
+  try {
+    const response = await fetch(STARTER_DATA_URL, { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const data = await response.json()
+    if (!Array.isArray(data.tracks)) throw new Error('tracksがありません')
+
+    const incomingTracks = data.tracks.map(normalizeStoredTrack).filter(Boolean)
+    const incomingSpotifyIds = new Set()
+    let addedCount = 0
+    let updatedCount = 0
+
+    incomingTracks.forEach((incoming) => {
+      if (incomingSpotifyIds.has(incoming.spotifyId)) return
+      incomingSpotifyIds.add(incoming.spotifyId)
+
+      const existing = S.tracks.find(track => track.spotifyId === incoming.spotifyId)
+      if (!existing) {
+        S.tracks.push(incoming)
+        addedCount += 1
+        return
+      }
+
+      const metadataKeys = [
+        'catalogId',
+        'title',
+        'artist',
+        'difficulty',
+        'category',
+        'decade',
+        'recommendedSeconds',
+        'note',
+      ]
+      let changed = false
+      metadataKeys.forEach((key) => {
+        if (incoming[key] && existing[key] !== incoming[key]) {
+          existing[key] = incoming[key]
+          changed = true
+        }
+      })
+      if (changed) updatedCount += 1
+    })
+
+    if (addedCount === 0 && updatedCount === 0) {
+      starterMessage.value = `スターター${incomingTracks.length}曲はすべて登録済みです`
+    } else {
+      const results = []
+      if (addedCount) results.push(`${addedCount}曲追加`)
+      if (updatedCount) results.push(`${updatedCount}曲の分類情報を更新`)
+      starterMessage.value = `${results.join('、')}しました`
+    }
+  } catch {
+    starterError.value = true
+    starterMessage.value = 'スターターJSONを読み込めませんでした'
+  } finally {
+    starterLoading.value = false
+  }
+}
+
 function saveTrack() {
   const parsed = parseSpotifyTrack(form.url)
   const answer = form.answer.trim()
@@ -314,6 +428,7 @@ function saveTrack() {
     const index = S.tracks.findIndex(track => track.id === editingId.value)
     if (index >= 0) {
       const updated = {
+        ...S.tracks[index],
         id: editingId.value,
         spotifyId: parsed.id,
         url: parsed.url,
@@ -933,6 +1048,67 @@ onUnmounted(() => {
 .duration-setting__input span {
   color: #9aaba0;
   font-size: 0.8rem;
+}
+
+.starter-import {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(30,215,96,0.24);
+  border-radius: 6px;
+  background: rgba(30,215,96,0.05);
+}
+
+.starter-import__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.starter-import__text strong {
+  color: #dce5df;
+  font-size: 0.78rem;
+}
+
+.starter-import__text span {
+  color: #718077;
+  font-size: 0.65rem;
+}
+
+.starter-import__button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #24783f;
+  border-radius: 6px;
+  background: #1d5d32;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.starter-import__button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.starter-import__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.starter-message {
+  margin: -4px 0 12px;
+  color: #65d98a;
+  font-size: 0.68rem;
+}
+
+.starter-message--error {
+  color: #ff6b6b;
 }
 
 .empty-state {
