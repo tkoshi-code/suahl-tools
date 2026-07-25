@@ -9,12 +9,24 @@
       v-else-if="currentView === 'home'"
       @selectCorner="onSelectCorner"
       @openAnnouncement="openAnnouncementWindow"
+      @openSpotifyIntro="openSpotifyIntroWindow"
     />
 
     <!-- 告知スライド -->
     <AnnouncementView
       v-else-if="currentView === 'announcement'"
-      @back="closeAnnouncementWindow"
+      @back="closePopupWindow"
+    />
+
+    <!-- Spotify イントロクイズ（QM操作画面） -->
+    <SpotifyIntroView
+      v-else-if="currentView === 'spotify-intro'"
+      @back="closePopupWindow"
+    />
+
+    <!-- Spotify イントロクイズ（会場表示） -->
+    <SpotifyAudienceView
+      v-else-if="currentView === 'spotify-audience'"
     />
 
     <!-- コーナールール表示 -->
@@ -115,7 +127,7 @@
       />
     </template>
 
-    <div v-if="!isAnnouncementWindow" class="display-scale" aria-label="表示倍率">
+    <div v-if="!isPopupWindow" class="display-scale" aria-label="表示倍率">
       <button
         class="display-scale__button"
         :disabled="displayScale <= DISPLAY_SCALE_MIN"
@@ -150,6 +162,8 @@ import TutorialView from './components/TutorialView.vue'
 import HomeView from './components/HomeView.vue'
 import CornerRulesView from './components/CornerRulesView.vue'
 import AnnouncementView from './components/AnnouncementView.vue'
+import SpotifyIntroView from './components/SpotifyIntroView.vue'
+import SpotifyAudienceView from './components/SpotifyAudienceView.vue'
 
 const {
   state: gameState,
@@ -164,8 +178,10 @@ const {
   undo,
 } = useGame()
 
-const isAnnouncementWindow = new URLSearchParams(window.location.search).get('view') === 'announcement'
-const currentView = ref(isAnnouncementWindow ? 'announcement' : 'home')
+const requestedView = new URLSearchParams(window.location.search).get('view')
+const popupViews = ['announcement', 'spotify-intro', 'spotify-audience']
+const isPopupWindow = popupViews.includes(requestedView)
+const currentView = ref(isPopupWindow ? requestedView : 'home')
 
 const DISPLAY_SCALE_KEY = 'piyopiyo_display_scale'
 const DISPLAY_SCALE_MIN = 70
@@ -189,7 +205,7 @@ function changeDisplayScale(delta) {
 
 watch(displayScale, value => {
   localStorage.setItem(DISPLAY_SCALE_KEY, String(value))
-  document.body.style.zoom = isAnnouncementWindow ? '1' : String(value / 100)
+  document.body.style.zoom = isPopupWindow ? '1' : String(value / 100)
 }, { immediate: true })
 
 const selectedCorner = ref(null)
@@ -230,7 +246,13 @@ function openAnnouncementWindow() {
   window.open(url, 'piyopiyo-announcement', 'popup=yes,width=1280,height=720')
 }
 
-function closeAnnouncementWindow() {
+function openSpotifyIntroWindow() {
+  const url = new URL(import.meta.env.BASE_URL, window.location.origin)
+  url.searchParams.set('view', 'spotify-intro')
+  window.open(url, 'piyopiyo-spotify-intro', 'popup=yes,width=1180,height=820')
+}
+
+function closePopupWindow() {
   if (window.opener) {
     window.close()
     return

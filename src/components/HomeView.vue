@@ -271,6 +271,14 @@
           </div>
           <span class="tool-card__ext">↗</span>
         </button>
+        <button class="tool-card tool-card--internal" @click="emit('openSpotifyIntro')">
+          <span class="tool-card__icon">♫</span>
+          <div class="tool-card__text">
+            <span class="tool-card__title">Spotify イントロクイズ</span>
+            <span class="tool-card__sub">QM専用・新しいウィンドウで操作</span>
+          </div>
+          <span class="tool-card__ext">↗</span>
+        </button>
         <a
           v-for="tool in TOOLS"
           :key="tool.id"
@@ -297,7 +305,7 @@ import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import { PIYOPIYO_CORNERS, TAG_CONFIG } from '../data/corners.js'
 import { toYouTubeEmbedUrl } from '../utils/youtube.js'
 
-const emit = defineEmits(['selectCorner', 'openAnnouncement'])
+const emit = defineEmits(['selectCorner', 'openAnnouncement', 'openSpotifyIntro'])
 
 const TOOLS = [
   {
