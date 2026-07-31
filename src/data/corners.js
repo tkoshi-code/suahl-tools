@@ -313,6 +313,19 @@ export const PIYOPIYO_CORNERS = [
     ],
   },
   {
+    id: 'custom-slot',
+    title: 'カスタムスロットミリオネア',
+    titleColor: '#ffb300',
+    icon: '🎰',
+    tags: ['チーム戦', '早押し', 'わいわい'],
+    bullets: [
+      '10問の正解数だけスピン！',
+      '最大3チームでカードを強化して目標VPを目指せ！',
+    ],
+    isGame: true,
+    gameType: 'custom-slot',
+  },
+  {
     id: 'flip7',
     title: 'Flip 7',
     titleColor: '#ffd740',
@@ -323,5 +336,6 @@ export const PIYOPIYO_CORNERS = [
       '7種類の数字を集めてFlip 7達成を目指せ！',
     ],
     isGame: true,
+    gameType: 'flip7',
   },
 ]

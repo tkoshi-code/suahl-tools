@@ -1,5 +1,5 @@
 <template>
-  <div class="app">
+  <div class="app" :data-app-version="APP_VERSION">
 
     <!-- チュートリアル -->
     <TutorialView v-if="showTutorial" @finish="showTutorial = false" />
@@ -33,6 +33,12 @@
     <CornerRulesView
       v-else-if="currentView === 'corner'"
       :corner="selectedCorner"
+      @back="currentView = 'home'"
+    />
+
+    <!-- カスタムスロットミリオネア -->
+    <SlotMillionaireView
+      v-else-if="currentView === 'custom-slot'"
       @back="currentView = 'home'"
     />
 
@@ -150,6 +156,13 @@
       >＋</button>
     </div>
 
+    <details v-if="currentView === 'home' && !isPopupWindow" class="version-history">
+      <summary>v{{ APP_VERSION }} バージョン履歴</summary>
+      <p v-for="entry in CHANGELOG" :key="entry[0]">
+        <strong>v{{ entry[0] }}</strong> {{ entry[1] }} — {{ entry[2] }}
+      </p>
+    </details>
+
   </div>
 </template>
 
@@ -164,6 +177,10 @@ import CornerRulesView from './components/CornerRulesView.vue'
 import AnnouncementView from './components/AnnouncementView.vue'
 import SpotifyIntroView from './components/SpotifyIntroView.vue'
 import SpotifyAudienceView from './components/SpotifyAudienceView.vue'
+import SlotMillionaireView from './components/SlotMillionaireView.vue'
+
+const APP_VERSION = window.APP_VERSION || '1.04'
+const CHANGELOG = window.CHANGELOG || []
 
 const {
   state: gameState,
@@ -232,6 +249,10 @@ const validTargets = computed(() => {
 
 function onSelectCorner(corner) {
   if (corner.isGame) {
+    if (corner.gameType === 'custom-slot') {
+      currentView.value = 'custom-slot'
+      return
+    }
     currentView.value = 'game'
     gameState.phase = 'setup'
   } else {
@@ -329,6 +350,22 @@ function handleNext() {
 .display-scale__button:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+.version-history {
+  max-width: 640px;
+  margin: 0 auto 80px;
+  padding: 10px 16px;
+  color: #607d8b;
+  font-size: 0.75rem;
+}
+
+.version-history summary {
+  cursor: pointer;
+}
+
+.version-history p {
+  margin: 8px 0 0;
 }
 
 .setup-screen {
