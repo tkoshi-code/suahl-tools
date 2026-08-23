@@ -9,8 +9,19 @@
 
     <main class="audience__main" aria-live="polite">
       <template v-if="state.phase === 'answer'">
-        <div class="audience__eyebrow">ANSWER</div>
-        <h1 class="audience__answer">{{ state.answer }}</h1>
+        <div class="audience__answer-layout" :class="{ 'audience__answer-layout--with-artwork': state.artworkUrl }">
+          <img
+            v-if="state.artworkUrl"
+            class="audience__artwork"
+            :src="state.artworkUrl"
+            alt="ジャケット画像"
+            @error="state.artworkUrl = ''"
+          />
+          <div class="audience__answer-copy">
+            <div class="audience__eyebrow">ANSWER</div>
+            <h1 class="audience__answer">{{ state.answer }}</h1>
+          </div>
+        </div>
       </template>
 
       <template v-else-if="state.phase === 'playing'">
@@ -48,6 +59,7 @@ const state = reactive({
   phase: 'idle',
   remaining: 0,
   answer: '',
+  artworkUrl: '',
 })
 
 let channel = null
@@ -65,6 +77,7 @@ onMounted(() => {
     state.phase = message.phase || 'idle'
     state.remaining = Number(message.remaining) || 0
     state.answer = message.phase === 'answer' ? String(message.answer || '') : ''
+    state.artworkUrl = message.phase === 'answer' ? String(message.artworkUrl || '') : ''
 
     window.clearTimeout(connectionTimer)
     connectionTimer = window.setTimeout(() => {
@@ -132,6 +145,30 @@ onUnmounted(() => {
   letter-spacing: 0.15em;
 }
 
+.audience__answer-layout {
+  width: min(1160px, 100%);
+  display: grid;
+  place-items: center;
+}
+
+.audience__answer-layout--with-artwork {
+  grid-template-columns: minmax(240px, 42%) minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 72px);
+  text-align: left;
+}
+
+.audience__artwork {
+  width: min(100%, 480px);
+  aspect-ratio: 1;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+}
+
+.audience__answer-copy {
+  min-width: 0;
+}
+
 .audience__countdown {
   font-size: clamp(7rem, 28vh, 16rem);
   font-weight: 900;
@@ -194,6 +231,17 @@ onUnmounted(() => {
     width: 96px;
     height: 96px;
     font-size: 3rem;
+  }
+
+  .audience__answer-layout--with-artwork {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    text-align: center;
+  }
+
+  .audience__artwork {
+    width: min(58vw, 260px);
+    border-radius: 12px;
   }
 }
 </style>

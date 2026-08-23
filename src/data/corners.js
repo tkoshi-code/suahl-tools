@@ -313,6 +313,19 @@ export const PIYOPIYO_CORNERS = [
     ],
   },
   {
+    id: 'sales-event',
+    title: '出張営業チームクイズ',
+    titleColor: '#f7d154',
+    icon: '🏅',
+    tags: ['チーム戦', '早押し', 'わいわい'],
+    bullets: [
+      '5名×5チームの3ラウンド戦と5○3×個人決勝',
+      'チーム・参加者名を会場得点表示へURL連携',
+    ],
+    isGame: true,
+    gameType: 'sales-event',
+  },
+  {
     id: 'custom-slot',
     title: 'カスタムスロットミリオネア',
     titleColor: '#ffb300',

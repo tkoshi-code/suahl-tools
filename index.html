@@ -6,19 +6,55 @@
     <link rel="manifest" href="./manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1b3a1e" />
-    <meta name="description" content="クイズイベントの進行とゲームを支援するPWA" />
-    <title>ぴよぴよクイズゲーム</title>
+    <meta name="description" content="スアールの営業活動とクイズイベント運営を支援するPWA" />
+    <title>スアール営業支援アプリ</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <main id="file-launcher" style="display:none;min-height:100vh;padding:24px;background:#0d130e;color:#fff;font-family:system-ui,sans-serif;box-sizing:border-box">
+        <section style="max-width:640px;margin:10vh auto;padding:28px;border:2px solid #f7c948;border-radius:20px;background:#171d18">
+          <p style="margin:0 0 8px;color:#f7c948;font-weight:800;letter-spacing:.12em">LOCAL APP</p>
+          <h1 style="margin:0 0 16px;font-size:clamp(24px,7vw,38px)">スアール営業支援アプリを起動します</h1>
+          <p style="line-height:1.8">ローカル配布版へ切り替えています。画面が変わらない場合は、先にこのフォルダーで <code style="padding:3px 7px;background:#050805;border-radius:5px">npm.cmd run build</code> を実行してください。</p>
+          <p style="line-height:1.8;color:#d5ddd6">GitHub Pagesまたはローカルサーバーで開いた場合は、通常版がそのまま起動します。</p>
+          <p><a href="./dist/index.html" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#df6b24;color:#fff;font-weight:800;text-decoration:none">ローカル配布版を開く</a></p>
+        </section>
+      </main>
+    </div>
     <script>
-      window.APP_VERSION = '1.04'
+      window.APP_VERSION = '1.21'
       window.CHANGELOG = [
+        ['1.21', '2026-08-23', 'GitHub Pagesの公開パスを /suahl-tools/ へ変更'],
+        ['1.20', '2026-08-23', 'アプリ名を「スアール営業支援アプリ」へ変更'],
+        ['1.19', '2026-08-21', 'ラッキー・ビッグ・スモールの数字変化を発動演出と変化前後ラベルで可視化'],
+        ['1.18', '2026-08-21', '強化の効果・レベルを直感的なバッジで表示し、出現VPカードを専用色で強調'],
+        ['1.17', '2026-08-21', 'アクティブスロットを中央、他チームを左右へ配置し、ヘッダーと盤面を省スペース化'],
+        ['1.16', '2026-08-21', 'index.htmlの直接起動に対応し、白画面になる問題を修正'],
+        ['1.15', '2026-08-21', 'スロットを育成専用に簡略化し、視認性・BGM・回転／停止／当たりSEを改善'],
+        ['1.14', '2026-08-03', '答え発表時にサビ位置への移動完了を待ってから再生するよう修正'],
+        ['1.13', '2026-08-03', 'サビ位置の登録後も通常出題が必ず曲の先頭から始まるよう修正'],
+        ['1.12', '2026-08-01', 'イントロの途中再開、答え発表時のサビ再生、会場表示のジャケット画像を追加'],
+        ['1.11', '2026-08-01', '出張営業の運営画面・会場表示の文字サイズと視認性を改善'],
+        ['1.10', '2026-07-31', '優勝チーム選択を高コントラスト化し、個人決勝予想を2連単表記へ変更'],
+        ['1.09', '2026-07-31', '個人決勝前の優勝者予想画面と任意の追加参戦枠を追加'],
+        ['1.08', '2026-07-31', '2nd Roundの代表者プルダウンを高コントラスト表示に改善'],
+        ['1.07', '2026-07-31', '1st Roundの5名を回答席・勝ち抜け・待機で一覧表示'],
+        ['1.06', '2026-07-31', '回答席・ジャンル・問題数の会場表示とジャンル・配点編集を追加'],
+        ['1.05', '2026-07-31', '出張営業向け5チーム戦・会場得点表示・5○3×個人決勝を追加'],
         ['1.04', '2026-07-31', '10問ラウンド・初回スピン・共有カードドラフト・時間制カスタマイズを追加'],
         ['1.03', '2026-07-31', '元ルール準拠の数字構成・ライン倍率・選択式強化・妨害を追加'],
         ['1.02', '2026-07-31', 'リール停止アニメーションと結果確認ステップを追加'],
         ['1.01', '2026-07-27', 'カスタムスロットミリオネア（最大3チーム戦）を追加'],
       ]
+      const isSourceFile = !decodeURIComponent(window.location.pathname)
+        .replaceAll('\\', '/')
+        .endsWith('/dist/index.html')
+      if (window.location.protocol === 'file:' && isSourceFile) {
+        document.getElementById('file-launcher').style.display = 'block'
+        const buildMarker = new Image()
+        buildMarker.addEventListener('load', () => window.location.replace('./dist/index.html'), { once: true })
+        buildMarker.src = './dist/favicon.svg'
+      }
     </script>
     <script type="module" src="/src/main.js"></script>
   </body>

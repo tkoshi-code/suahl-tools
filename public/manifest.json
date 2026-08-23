@@ -1,7 +1,7 @@
 {
-  "name": "ぴよぴよクイズゲーム",
-  "short_name": "ぴよクイズ",
-  "description": "クイズイベントの進行とゲームを支援するPWA",
+  "name": "スアール営業支援アプリ",
+  "short_name": "スアール営業支援",
+  "description": "スアールの営業活動とクイズイベント運営を支援するPWA",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

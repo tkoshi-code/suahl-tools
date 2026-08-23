@@ -1,4 +1,4 @@
-const CACHE = 'quiz-7flips-v5'
+const CACHE = 'suahl-tools-v22'
 const APP_SHELL = ['./', './index.html', './manifest.json', './favicon.svg', './icons.svg']
 
 self.addEventListener('install', event => {

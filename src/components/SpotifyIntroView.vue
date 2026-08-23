@@ -30,6 +30,10 @@
           <div class="current-track">
             <span class="current-track__label">QM確認用</span>
             <strong>{{ activeTrack.answer }}</strong>
+            <span class="current-track__meta">
+              {{ activeTrack.chorusSeconds === null ? 'サビ位置未設定' : `サビ ${formatPlaybackTime(activeTrack.chorusSeconds)}` }}
+              · {{ activeTrack.artworkUrl ? 'ジャケット取得済み' : artworkLoading ? 'ジャケット取得中...' : 'ジャケット未取得' }}
+            </span>
           </div>
 
           <div class="spotify-player">
@@ -44,8 +48,8 @@
               {{ remainingSeconds }}
             </div>
             <div class="timer-copy">
-              <span>{{ isPlaying ? '再生中' : hasPlayed ? '停止しました' : '再生待ち' }}</span>
-              <small>{{ S.introSeconds }}秒で自動停止</small>
+              <span>{{ timerStatusText }}</span>
+              <small>{{ playbackMode === 'chorus' ? 'サビは停止するまで再生' : `${S.introSeconds}秒で自動停止` }}</small>
             </div>
           </div>
 
@@ -53,26 +57,34 @@
             <button
               class="command-button command-button--play"
               type="button"
-              :disabled="!playerReady || isPlaying"
-              @click="startIntro"
+              :disabled="!playerReady || isPlaying || answerRevealed"
+              @click="playIntro"
             >
-              ▶ {{ S.introSeconds }}秒再生
+              {{ introButtonLabel }}
             </button>
             <button
               class="command-button"
               type="button"
-              :disabled="!playerReady || !isPlaying"
-              @click="pauseIntro"
+              :disabled="!playerReady || (!isPlaying && !chorusSeeking)"
+              @click="pausePlayback"
             >
-              ■ 停止
+              {{ playbackMode === 'chorus' ? '■ サビ停止' : '■ 停止' }}
             </button>
             <button
               class="command-button command-button--answer"
               type="button"
-              :disabled="!hasPlayed"
+              :disabled="!hasPlayed || isPlaying"
               @click="toggleAnswer"
             >
               {{ answerRevealed ? '答えを隠す' : '会場に答えを表示' }}
+            </button>
+            <button
+              class="command-button command-button--chorus"
+              type="button"
+              :disabled="!hasPlayed || !hasChorusStart || isPlaying || chorusSeeking"
+              @click="revealAnswerWithChorus"
+            >
+              {{ chorusSeeking ? '♫ サビ位置へ移動中...' : '♫ 答え表示＋サビ再生' }}
             </button>
           </div>
 
@@ -108,6 +120,19 @@
             maxlength="100"
             autocomplete="off"
             placeholder="曲名 / アーティスト名"
+            @input="formError = ''"
+          />
+
+          <label for="spotify-chorus">サビ開始位置（秒・任意）</label>
+          <input
+            id="spotify-chorus"
+            v-model="form.chorusSeconds"
+            type="number"
+            min="0"
+            max="3600"
+            step="1"
+            inputmode="numeric"
+            placeholder="例：72"
             @input="formError = ''"
           />
 
@@ -205,8 +230,12 @@
         </div>
 
         <details class="usage-notes">
-          <summary>利用時の注意</summary>
+          <summary>使い方ガイド・利用時の注意</summary>
           <p>この画面はQM専用です。会場には「会場表示」を別ウインドウで開いて表示してください。</p>
+          <p>通常の出題は、サビ位置を登録していても必ず曲の先頭から始まります。登録したサビ位置を使うのは「答え表示＋サビ再生」だけです。</p>
+          <p>回答者が誤答したときは「停止」の後に「途中から再開」を押すと、停止位置と残り時間から続けられます。</p>
+          <p>曲の編集でサビ開始位置を秒数で登録すると、「答え表示＋サビ再生」でサビ位置への移動完了後に、答えとジャケットを表示しながらサビを流せます。</p>
+          <p>ジャケットは曲をセットしたときにSpotifyから取得します。取得できない場合も、再生と答え表示は利用できます。</p>
           <p>ブラウザの自動再生制限で音が出ない場合は、Spotifyプレーヤー内の再生ボタンを一度押してください。</p>
           <p>プレイリストの自動取込には対応していません。曲の共有リンクを1曲ずつ登録します。</p>
           <p>店舗イベントでの利用に必要な楽曲の権利とSpotifyの利用条件は、運営側で確認してください。</p>
@@ -227,6 +256,23 @@ const CHANNEL_NAME = 'piyopiyo_spotify_intro_channel_v1'
 const STARTER_DATA_URL = `${import.meta.env.BASE_URL}data/spotify-intro-starter.json`
 const MIN_SECONDS = 3
 const MAX_SECONDS = 30
+const MAX_CHORUS_SECONDS = 3600
+
+function normalizeChorusSeconds(value) {
+  if (value === null || value === undefined || value === '') return null
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_CHORUS_SECONDS) return null
+  return Math.round(seconds)
+}
+
+function normalizeArtworkUrl(value) {
+  try {
+    const url = new URL(String(value || ''))
+    return url.protocol === 'https:' && url.hostname === 'i.scdn.co' ? url.href : ''
+  } catch {
+    return ''
+  }
+}
 
 function createTrackId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
@@ -255,6 +301,8 @@ function normalizeStoredTrack(track) {
       && Number.isFinite(Number(track.recommendedSeconds))
       ? Math.min(MAX_SECONDS, Math.max(MIN_SECONDS, Math.round(Number(track.recommendedSeconds))))
       : null,
+    chorusSeconds: normalizeChorusSeconds(track.chorusSeconds),
+    artworkUrl: normalizeArtworkUrl(track.artworkUrl),
     note: String(track.note || '').trim().slice(0, 200),
   }
 }
@@ -281,7 +329,7 @@ function loadState() {
 }
 
 const S = reactive(loadState())
-const form = reactive({ url: '', answer: '' })
+const form = reactive({ url: '', answer: '', chorusSeconds: '' })
 const formError = ref('')
 const editingId = ref('')
 const activeTrack = ref(null)
@@ -293,7 +341,12 @@ const playerError = ref('')
 const isPlaying = ref(false)
 const hasPlayed = ref(false)
 const answerRevealed = ref(false)
-const remainingSeconds = ref(S.introSeconds)
+const playbackMode = ref('')
+const playbackPositionMs = ref(0)
+const chorusSeeking = ref(false)
+const remainingMilliseconds = ref(S.introSeconds * 1000)
+const remainingSeconds = computed(() => Math.ceil(remainingMilliseconds.value / 1000))
+const artworkLoading = ref(false)
 const starterLoading = ref(false)
 const starterMessage = ref('')
 const starterError = ref(false)
@@ -302,11 +355,45 @@ let embedController = null
 let countdownTimer = null
 let countdownEndsAt = 0
 let channel = null
+let artworkRequestId = 0
+let pendingChorusStart = null
+let chorusStartFallbackTimer = null
+let chorusPlaybackStartedAt = 0
+
+const hasResumableIntro = computed(() => (
+  playbackMode.value === 'intro'
+  && hasPlayed.value
+  && remainingMilliseconds.value > 0
+  && remainingMilliseconds.value < S.introSeconds * 1000
+))
+
+const hasChorusStart = computed(() => (
+  activeTrack.value?.chorusSeconds !== null
+  && activeTrack.value?.chorusSeconds !== undefined
+))
+
+const introButtonLabel = computed(() => {
+  if (hasResumableIntro.value) return `▶ 途中から再開（残り${remainingSeconds.value}秒）`
+  if (hasPlayed.value) return '↺ 先頭からもう一度'
+  return `▶ ${S.introSeconds}秒再生`
+})
+
+const timerStatusText = computed(() => {
+  if (chorusSeeking.value) return 'サビ位置へ移動中'
+  if (isPlaying.value && playbackMode.value === 'chorus') return 'サビ再生中'
+  if (isPlaying.value) return 'イントロ再生中'
+  if (hasResumableIntro.value) return '停止位置から再開できます'
+  if (hasPlayed.value) return '停止しました'
+  return '再生待ち'
+})
 
 const playerStatus = computed(() => {
   if (playerError.value) return { type: 'error', text: '読込エラー' }
   if (playerLoading.value) return { type: 'loading', text: '読込中' }
+  if (chorusSeeking.value) return { type: 'loading', text: 'サビ準備中' }
+  if (isPlaying.value && playbackMode.value === 'chorus') return { type: 'playing', text: 'サビ再生中' }
   if (isPlaying.value) return { type: 'playing', text: '再生中' }
+  if (hasResumableIntro.value) return { type: 'ready', text: '一時停止' }
   if (activeTrack.value) return { type: 'ready', text: 'セット済み' }
   return { type: 'idle', text: '未選択' }
 })
@@ -328,7 +415,15 @@ function normalizeDuration() {
   S.introSeconds = Number.isFinite(value)
     ? Math.min(MAX_SECONDS, Math.max(MIN_SECONDS, Math.round(value)))
     : 10
-  if (!isPlaying.value) remainingSeconds.value = S.introSeconds
+  if (!isPlaying.value && !hasResumableIntro.value) {
+    remainingMilliseconds.value = S.introSeconds * 1000
+  }
+}
+
+function formatPlaybackTime(seconds) {
+  const normalized = Math.max(0, Math.round(Number(seconds) || 0))
+  const minutes = Math.floor(normalized / 60)
+  return `${minutes}:${String(normalized % 60).padStart(2, '0')}`
 }
 
 function trackMeta(track) {
@@ -337,6 +432,7 @@ function trackMeta(track) {
     track.category,
     track.decade,
     track.recommendedSeconds ? `推奨${track.recommendedSeconds}秒` : '',
+    track.chorusSeconds !== null ? `サビ${formatPlaybackTime(track.chorusSeconds)}` : '',
   ].filter(Boolean)
   return [history, ...metadata].join(' · ')
 }
@@ -405,9 +501,10 @@ async function addStarterSet() {
   }
 }
 
-function saveTrack() {
+async function saveTrack() {
   const parsed = parseSpotifyTrack(form.url)
   const answer = form.answer.trim()
+  const chorusSeconds = normalizeChorusSeconds(form.chorusSeconds)
 
   if (!parsed) {
     formError.value = 'open.spotify.com の曲共有URLを入力してください'
@@ -415,6 +512,10 @@ function saveTrack() {
   }
   if (!answer) {
     formError.value = '会場に表示する答えを入力してください'
+    return
+  }
+  if (form.chorusSeconds !== '' && chorusSeconds === null) {
+    formError.value = 'サビ開始位置は0〜3600秒で入力してください'
     return
   }
 
@@ -433,9 +534,11 @@ function saveTrack() {
         spotifyId: parsed.id,
         url: parsed.url,
         answer: answer.slice(0, 100),
+        chorusSeconds,
+        artworkUrl: S.tracks[index].spotifyId === parsed.id ? S.tracks[index].artworkUrl : '',
       }
       S.tracks[index] = updated
-      if (activeTrack.value?.id === editingId.value) setTrack(updated)
+      if (activeTrack.value?.id === editingId.value) await setTrack(updated)
     }
   } else {
     const track = {
@@ -443,9 +546,11 @@ function saveTrack() {
       spotifyId: parsed.id,
       url: parsed.url,
       answer: answer.slice(0, 100),
+      chorusSeconds,
+      artworkUrl: '',
     }
     S.tracks.push(track)
-    if (!activeTrack.value) setTrack(track)
+    if (!activeTrack.value) await setTrack(track)
   }
 
   cancelEdit()
@@ -455,6 +560,7 @@ function editTrack(track) {
   editingId.value = track.id
   form.url = track.url
   form.answer = track.answer
+  form.chorusSeconds = track.chorusSeconds ?? ''
   formError.value = ''
 }
 
@@ -462,6 +568,7 @@ function cancelEdit() {
   editingId.value = ''
   form.url = ''
   form.answer = ''
+  form.chorusSeconds = ''
   formError.value = ''
 }
 
@@ -473,7 +580,7 @@ function deleteTrack(track) {
   playedTrackIds.value = playedTrackIds.value.filter(id => id !== track.id)
 
   if (activeTrack.value?.id === track.id) {
-    pauseIntro()
+    pausePlayback()
     activeTrack.value = null
     playerReady.value = false
     embedController?.destroy()
@@ -484,12 +591,16 @@ function deleteTrack(track) {
 }
 
 async function setTrack(track) {
-  stopCountdown()
+  cancelPendingChorusStart()
+  clearCountdown()
   activeTrack.value = track
-  remainingSeconds.value = S.introSeconds
+  remainingMilliseconds.value = S.introSeconds * 1000
+  playbackPositionMs.value = 0
+  playbackMode.value = ''
   hasPlayed.value = false
   answerRevealed.value = false
   playerError.value = ''
+  void ensureArtwork(track)
 
   if (embedController) {
     embedController.pause()
@@ -527,8 +638,25 @@ async function createPlayer(track) {
           playerReady.value = true
         })
         controller.addListener('playback_update', (event) => {
+          const position = Number(event?.data?.position)
+          if (Number.isFinite(position) && position >= 0) playbackPositionMs.value = position
+
+          if (
+            pendingChorusStart
+            && Number.isFinite(position)
+            && Math.abs(position - pendingChorusStart.seconds * 1000) <= 1500
+          ) {
+            completePendingChorusStart()
+            return
+          }
+
           if (event?.data?.isPaused && isPlaying.value && event.data.position > 0) {
-            stopCountdown()
+            if (
+              playbackMode.value === 'chorus'
+              && Date.now() - chorusPlaybackStartedAt < 600
+            ) return
+            if (playbackMode.value === 'intro') freezeCountdown()
+            else clearCountdown()
             hasPlayed.value = true
           }
         })
@@ -545,46 +673,92 @@ async function createPlayer(track) {
   }
 }
 
-function startIntro() {
+async function ensureArtwork(track) {
+  if (!track || track.artworkUrl) return
+
+  const requestId = ++artworkRequestId
+  artworkLoading.value = true
+  try {
+    const endpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(track.url)}`
+    const response = await fetch(endpoint)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const metadata = await response.json()
+    const artworkUrl = normalizeArtworkUrl(metadata.thumbnail_url)
+    if (!artworkUrl) throw new Error('thumbnail_urlがありません')
+
+    const storedTrack = S.tracks.find(item => item.id === track.id)
+    if (storedTrack) storedTrack.artworkUrl = artworkUrl
+    if (activeTrack.value?.id === track.id) publishAudienceState()
+  } catch {
+    // ジャケット取得に失敗しても出題・再生は継続する。
+  } finally {
+    if (requestId === artworkRequestId) artworkLoading.value = false
+  }
+}
+
+function playIntro() {
   if (!embedController || !activeTrack.value) return
 
-  stopCountdown()
+  cancelPendingChorusStart()
+  const shouldResume = hasResumableIntro.value
+  clearCountdown()
   answerRevealed.value = false
-  hasPlayed.value = false
-  remainingSeconds.value = S.introSeconds
   playerError.value = ''
+  playbackMode.value = 'intro'
 
-  embedController.restart()
-  embedController.play()
-  isPlaying.value = true
-  countdownEndsAt = Date.now() + S.introSeconds * 1000
+  if (shouldResume) {
+    embedController.resume()
+  } else {
+    hasPlayed.value = false
+    playbackPositionMs.value = 0
+    remainingMilliseconds.value = S.introSeconds * 1000
+    // サビ再生後などSpotify側に再生位置が残っていても、通常出題は必ず頭出しする。
+    embedController.pause()
+    embedController.seek(0)
+    embedController.play()
+  }
+
+  beginCountdown()
 
   if (!playedTrackIds.value.includes(activeTrack.value.id)) {
     playedTrackIds.value = [...playedTrackIds.value, activeTrack.value.id]
   }
 
+}
+
+function beginCountdown() {
+  isPlaying.value = true
+  countdownEndsAt = Date.now() + remainingMilliseconds.value
   countdownTimer = window.setInterval(updateCountdown, 100)
 }
 
 function updateCountdown() {
   const millisecondsLeft = Math.max(0, countdownEndsAt - Date.now())
-  remainingSeconds.value = Math.ceil(millisecondsLeft / 1000)
+  remainingMilliseconds.value = millisecondsLeft
 
   if (millisecondsLeft > 0) return
 
   embedController?.pause()
-  stopCountdown()
+  clearCountdown()
   hasPlayed.value = true
-  remainingSeconds.value = 0
 }
 
-function pauseIntro() {
+function pausePlayback() {
+  cancelPendingChorusStart()
+  if (playbackMode.value === 'intro') freezeCountdown()
+  else clearCountdown()
   embedController?.pause()
-  stopCountdown()
   if (activeTrack.value) hasPlayed.value = true
 }
 
-function stopCountdown() {
+function freezeCountdown() {
+  if (isPlaying.value) {
+    remainingMilliseconds.value = Math.max(0, countdownEndsAt - Date.now())
+  }
+  clearCountdown()
+}
+
+function clearCountdown() {
   window.clearInterval(countdownTimer)
   countdownTimer = null
   isPlaying.value = false
@@ -593,6 +767,59 @@ function stopCountdown() {
 function toggleAnswer() {
   if (!hasPlayed.value) return
   answerRevealed.value = !answerRevealed.value
+}
+
+function revealAnswerWithChorus() {
+  if (!embedController || !hasChorusStart.value || isPlaying.value || chorusSeeking.value) return
+
+  cancelPendingChorusStart()
+  clearCountdown()
+  answerRevealed.value = true
+  hasPlayed.value = true
+  playbackMode.value = 'chorus'
+  playerError.value = ''
+  chorusSeeking.value = true
+
+  const seconds = activeTrack.value.chorusSeconds
+  pendingChorusStart = {
+    trackId: activeTrack.value.id,
+    url: activeTrack.value.url,
+    seconds,
+  }
+
+  embedController.pause()
+  embedController.seek(seconds)
+
+  chorusStartFallbackTimer = window.setTimeout(() => {
+    if (!pendingChorusStart || !embedController) return
+
+    const pending = pendingChorusStart
+    pendingChorusStart = null
+    chorusSeeking.value = false
+    embedController.loadEntity(pending.url, false, pending.seconds)
+    embedController.play()
+    isPlaying.value = true
+    chorusPlaybackStartedAt = Date.now()
+  }, 800)
+}
+
+function completePendingChorusStart() {
+  if (!pendingChorusStart || !embedController) return
+
+  window.clearTimeout(chorusStartFallbackTimer)
+  chorusStartFallbackTimer = null
+  pendingChorusStart = null
+  chorusSeeking.value = false
+  embedController.play()
+  isPlaying.value = true
+  chorusPlaybackStartedAt = Date.now()
+}
+
+function cancelPendingChorusStart() {
+  window.clearTimeout(chorusStartFallbackTimer)
+  chorusStartFallbackTimer = null
+  pendingChorusStart = null
+  chorusSeeking.value = false
 }
 
 async function selectRandomTrack() {
@@ -623,6 +850,7 @@ function getAudienceState() {
     phase,
     remaining: remainingSeconds.value,
     answer: answerRevealed.value ? activeTrack.value?.answer || '' : '',
+    artworkUrl: answerRevealed.value ? activeTrack.value?.artworkUrl || '' : '',
   }
 }
 
@@ -639,7 +867,7 @@ function openAudienceWindow() {
 
 function exportData() {
   const data = JSON.stringify({
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     introSeconds: S.introSeconds,
     tracks: S.tracks,
@@ -667,7 +895,7 @@ async function restoreData(event) {
     if (!tracks) throw new Error('tracksがありません')
     if (!window.confirm(`${tracks.length}曲のバックアップで現在の登録内容を置き換えますか？`)) return
 
-    pauseIntro()
+    pausePlayback()
     embedController?.destroy()
     embedController = null
     activeTrack.value = null
@@ -691,7 +919,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  stopCountdown()
+  cancelPendingChorusStart()
+  clearCountdown()
   embedController?.destroy()
   channel?.close()
 })
@@ -838,6 +1067,11 @@ onUnmounted(() => {
   font-size: 1.2rem;
 }
 
+.current-track__meta {
+  color: #829087;
+  font-size: 0.68rem;
+}
+
 .spotify-player {
   position: relative;
   min-height: 152px;
@@ -950,6 +1184,13 @@ onUnmounted(() => {
   border-color: #ffd740;
   background: rgba(255,215,64,0.08);
   color: #ffd740;
+}
+
+.command-button--chorus {
+  grid-column: 1 / -1;
+  border-color: #1ed760;
+  background: rgba(30,215,96,0.08);
+  color: #65d98a;
 }
 
 .command-button:hover:not(:disabled),

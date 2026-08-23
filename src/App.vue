@@ -29,6 +29,17 @@
       v-else-if="currentView === 'spotify-audience'"
     />
 
+    <!-- 出張営業チームクイズ（QM操作画面） -->
+    <SalesEventView
+      v-else-if="currentView === 'sales-event'"
+      @back="currentView = 'home'"
+    />
+
+    <!-- 出張営業チームクイズ（会場得点表示） -->
+    <SalesScoreView
+      v-else-if="currentView === 'sales-score'"
+    />
+
     <!-- コーナールール表示 -->
     <CornerRulesView
       v-else-if="currentView === 'corner'"
@@ -178,8 +189,10 @@ import AnnouncementView from './components/AnnouncementView.vue'
 import SpotifyIntroView from './components/SpotifyIntroView.vue'
 import SpotifyAudienceView from './components/SpotifyAudienceView.vue'
 import SlotMillionaireView from './components/SlotMillionaireView.vue'
+import SalesEventView from './components/SalesEventView.vue'
+import SalesScoreView from './components/SalesScoreView.vue'
 
-const APP_VERSION = window.APP_VERSION || '1.04'
+const APP_VERSION = window.APP_VERSION || '1.21'
 const CHANGELOG = window.CHANGELOG || []
 
 const {
@@ -196,9 +209,10 @@ const {
 } = useGame()
 
 const requestedView = new URLSearchParams(window.location.search).get('view')
-const popupViews = ['announcement', 'spotify-intro', 'spotify-audience']
+const popupViews = ['announcement', 'spotify-intro', 'spotify-audience', 'sales-score']
+const directViews = [...popupViews, 'sales-event']
 const isPopupWindow = popupViews.includes(requestedView)
-const currentView = ref(isPopupWindow ? requestedView : 'home')
+const currentView = ref(directViews.includes(requestedView) ? requestedView : 'home')
 
 const DISPLAY_SCALE_KEY = 'piyopiyo_display_scale'
 const DISPLAY_SCALE_MIN = 70
@@ -249,6 +263,10 @@ const validTargets = computed(() => {
 
 function onSelectCorner(corner) {
   if (corner.isGame) {
+    if (corner.gameType === 'sales-event') {
+      currentView.value = 'sales-event'
+      return
+    }
     if (corner.gameType === 'custom-slot') {
       currentView.value = 'custom-slot'
       return
