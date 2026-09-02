@@ -21,15 +21,17 @@
       <h2>使い方ガイド</h2>
       <ol>
         <li>開始時に全チームが1回ずつスロットを回します。</li>
-        <li>1ラウンド10問。正解したチームへスロット権を記録します。</li>
-        <li>10問終了後、獲得した権利の回数だけチームごとにスピンします。</li>
+        <li>1ラウンド10問。正解したチームのクレジットコインが1枚増えます。</li>
+        <li>10問終了後、獲得したクレジットの回数だけチームごとにスピンします。スピン開始時にコインを1枚消費します。</li>
         <li>全チームのスピン後、低VP順に3枚組の育成カードセットを選びます。</li>
-        <li>制限時間内にナンバー・強化・倍率カードでスロットを育て、次の10問へ進みます。</li>
+        <li>相談時間の目安を見ながらナンバー・強化・倍率カードでスロットを育て、準備ができたら手動で次の10問へ進みます。</li>
       </ol>
       <p>妨害カードはありません。有効ラインで同じ数字が3個揃うと「数字×ライン倍率」のVPを獲得します。1/2カードはラインごとに1または2として扱えます。</p>
       <p>PCではスピン中のチームを中央、他チームを左右の小型盤面で表示します。狭い画面では操作中のチームだけを表示します。</p>
-      <p>強化カードは効果とレベルを色分けバッジで表示します。3（+1VP）は水色、3（+2VP）は紫色に光り、ライン成立とは別の出現VPだと分かります。</p>
-      <p>ラッキー・ビッグ・スモールで数字が変わる場合は、元の数字で停止した後に専用SEと発光演出が入り、「変化前→変化後」を結果確認まで表示します。</p>
+      <p>強化カードは効果とレベルを色分けバッジで表示します。リスクリターンは使用せず、リムーブは共有山札に7枚入ります。3（+1VP）は水色、3（+2VP）は紫色に光り、ライン成立とは別の出現VPだと分かります。</p>
+      <p>各チームの「現在の数字セット」には、数字カードの種類・枚数・合計枚数を表示します。</p>
+      <p>勝利VPはプリセットのほか、10〜9999VPの整数を直接入力できます。</p>
+      <p>ラッキー・ビッグ・スモールで数字が変わる場合は、元の数字で停止した後に専用SEと発光演出が入り、対象リールだけが滑って揃います。「変化前→変化後」は結果確認まで表示します。</p>
       <p>BGMと回転・停止・当たりSEは画面上部から個別にON/OFFできます。最初の再生はボタン操作後に始まります。</p>
     </section>
 
@@ -41,8 +43,16 @@
       </div>
       <label>勝利VP</label>
       <div class="choice-row">
-        <button v-for="number in [50, 75, 100]" :key="number" :class="{ selected: setup.targetVp === number }" @click="setup.targetVp = number">{{ number }}VP</button>
+        <button v-for="number in [50, 75, 100, 200, 300]" :key="number" :class="{ selected: setup.targetVp === number }" @click="setup.targetVp = number">{{ number }}VP</button>
       </div>
+      <label class="target-vp-field">
+        <span>カスタム設定</span>
+        <span class="target-vp-input">
+          <input v-model.number="setup.targetVp" type="number" min="10" max="9999" step="1" inputmode="numeric" aria-label="勝利VPのカスタム値" />
+          <b>VP</b>
+        </span>
+        <small>10〜9999の整数で入力</small>
+      </label>
       <label>改造時間</label>
       <div class="choice-row">
         <button v-for="seconds in [60, 90, 120]" :key="seconds" :class="{ selected: setup.customizeSeconds === seconds }" @click="setup.customizeSeconds = seconds">{{ seconds }}秒</button>
@@ -76,6 +86,36 @@
           <button class="ghost-button" :disabled="state.phase === 'rolling'" @click="confirmReset">新しいゲーム</button>
         </section>
       </div>
+
+      <section
+        v-if="showCreditBank"
+        class="credit-bank panel"
+        :style="{ '--credit-columns': state.teams.length }"
+        aria-label="チーム別スロットクレジット"
+      >
+        <article
+          v-for="(team, index) in state.teams"
+          :key="team.id"
+          class="credit-team"
+          :class="{ active: state.activeTeamIndex === index }"
+          :style="{ '--team': team.color }"
+        >
+          <div class="credit-team__heading">
+            <span>TEAM {{ index + 1 }} · {{ team.name }}</span>
+            <strong>CREDIT {{ displayedCredits(team, index) }}</strong>
+          </div>
+          <TransitionGroup
+            tag="div"
+            name="credit-coin"
+            class="credit-coins"
+            :aria-label="`${team.name} ${displayedCredits(team, index)}クレジット`"
+            aria-live="polite"
+          >
+            <span v-for="coin in displayedCredits(team, index)" :key="coin" class="credit-coin" aria-hidden="true">C</span>
+            <small v-if="displayedCredits(team, index) === 0" key="empty">NO CREDIT</small>
+          </TransitionGroup>
+        </article>
+      </section>
 
       <section v-if="state.phase === 'quiz'" class="quiz-console panel">
         <p class="quiz-kicker">ROUND {{ state.roundNumber }} · QUESTION {{ state.questionInRound + 1 }}</p>
@@ -116,11 +156,12 @@
       <section v-if="state.phase === 'customize'" class="customize panel action-panel">
         <p class="quiz-kicker">CUSTOMIZE PHASE</p>
         <h2>カードを使ってスロットを育成</h2>
+        <small class="timer-caption">相談時間の目安</small>
         <div class="timer" :class="{ expired: customizeRemaining === 0 }">
           {{ formatTime(customizeRemaining) }}
         </div>
         <p v-if="customizeRemaining > 0">各チームで相談し、所持カードを使ってください。未使用カードは次ラウンドへ持ち越せます。</p>
-        <p v-else class="error">時間終了です。カード使用を終了し、次の10問へ進んでください。</p>
+        <p v-else class="timer-over">目安時間になりました。相談とカード操作はそのまま続けられます。</p>
         <button class="primary next-round-button" @click="finishCustomize">育成を終了して次の10問へ</button>
       </section>
 
@@ -147,7 +188,7 @@
           <div class="meter"><i :style="{ width: `${Math.min(100, team.vp / state.targetVp * 100)}%` }"></i></div>
           <div class="resources">
             <span><small>ラウンド正解</small><strong>{{ team.roundCorrect }}問</strong></span>
-            <span><small>残りスピン</small><strong>{{ team.spinRightsRemaining }}/{{ team.spinRights }}</strong></span>
+            <span><small>{{ state.phase === 'quiz' ? '獲得CREDIT' : '残りCREDIT' }}</small><strong>● {{ displayedCredits(team, index) }}</strong></span>
             <span><small>所持カード</small><strong>{{ team.hand.length }}枚</strong></span>
           </div>
 
@@ -171,7 +212,16 @@
                 }, transformationClass(index, reelIndex)]"
                 :data-bonus="card?.bonus ? `+${card.bonus}VP` : null"
               >
-                <b class="reel-value">{{ card ? numberCardLabel(card) : '–' }}</b>
+                <div v-if="isTransformingCell(index, reelIndex)" class="reel-slip-window" aria-hidden="true">
+                  <div
+                    class="reel-slip-strip"
+                    :class="{ 'reel-slip-strip--landed': cellTransformation(index, reelIndex).applied }"
+                  >
+                    <b>{{ cellTransformation(index, reelIndex).beforeLabel }}</b>
+                    <b>{{ cellTransformation(index, reelIndex).afterLabel }}</b>
+                  </div>
+                </div>
+                <b v-else class="reel-value">{{ card ? numberCardLabel(card) : '–' }}</b>
                 <small v-if="cellTransformation(index, reelIndex)" class="change-tag">
                   {{ cellTransformation(index, reelIndex).icon }}
                   {{ cellTransformation(index, reelIndex).beforeLabel }}→{{ cellTransformation(index, reelIndex).afterLabel }}
@@ -202,7 +252,22 @@
             </span>
           </div>
 
-          <p v-if="state.phase !== 'quiz'" class="deck-status"><strong>数字構成</strong> {{ deckSummary(team) }}</p>
+          <div v-if="state.phase !== 'quiz'" class="deck-status" aria-label="現在の数字セット">
+            <div class="deck-status__heading">
+              <strong>現在の数字セット</strong>
+              <span>全{{ team.numberDeck.length }}枚</span>
+            </div>
+            <div class="number-set">
+              <span
+                v-for="entry in deckEntries(team)"
+                :key="entry.key"
+                class="number-set__chip"
+                :class="`number-set__chip--${entry.tone}`"
+              >
+                <b>{{ entry.label }}</b><em>×{{ entry.count }}</em>
+              </span>
+            </div>
+          </div>
           <div v-if="state.phase !== 'quiz'" class="ability-status" aria-label="強化バッジ">
             <span v-if="!abilityBadges(team).length" class="no-ability">強化なし</span>
             <span
@@ -246,7 +311,6 @@
               :key="card.uid"
               class="hand-card"
               :class="`card--${card.kind}`"
-              :disabled="customizeRemaining === 0"
               @click="useCard(index, card.uid)"
             >
               <span class="card-kind">{{ cardKindLabel(card) }}</span>
@@ -371,7 +435,7 @@ const phaseInstruction = computed(() => {
   if (state.phase === 'rolling') return `${activeTeam?.name || '対象チーム'}のリール回転中`
   if (state.phase === 'spin-result') return '結果と獲得VPを確認して次へ進む'
   if (state.phase === 'draft') return `${draftTeam.value?.name || '対象チーム'}が育成カード3枚組を選ぶ`
-  if (state.phase === 'customize') return '制限時間内にカードを使ってスロットを育てる'
+  if (state.phase === 'customize') return '目安時間を見ながらカードを使い、準備ができたら次へ進む'
   if (state.phase === 'finished') return '優勝チームを確認する'
   return '対戦を開始する'
 })
@@ -380,6 +444,15 @@ const winner = computed(() => state.phase === 'finished'
   : null)
 const draftTeam = computed(() => state.teams[state.draftOrder?.[state.draftCursor]] || null)
 const pendingTeam = computed(() => pendingUse.value ? state.teams[pendingUse.value.teamIndex] : null)
+const showCreditBank = computed(() => ['quiz', 'spin-turn', 'rolling', 'spin-result'].includes(state.phase))
+
+function displayedCredits(team, teamIndex) {
+  if (state.phase === 'quiz') return Math.max(0, Number(team.roundCorrect) || 0)
+  const credits = Math.max(0, Number(team.spinRightsRemaining) || 0)
+  return state.phase === 'rolling' && state.activeTeamIndex === teamIndex
+    ? Math.max(0, credits - 1)
+    : credits
+}
 
 watch(state, saveState, { deep: true })
 watch(() => state.phase, phase => {
@@ -443,7 +516,6 @@ function makeTeam(name, index) {
       luckyNumber: 0,
       bigNumber: 0,
       smallNumber: 0,
-      riskReturn: 0,
     },
     hand: [],
     roundCorrect: 0,
@@ -475,12 +547,11 @@ function buildCardPool() {
   addCopies(8, () => makeCard('number', '3p2', '3（+2VP）', '出現するだけで+2VP。ライン上は3', { numberCard: { key: '3p2', value: 3, bonus: 2, label: '3⁺²' } }))
   addCopies(8, () => makeCard('number', '7', '7', '高配当の7を山札へ追加', { numberCard: { key: '7', value: 7, bonus: 0, label: '7' } }))
 
-  addCopies(4, () => makeCard('upgrade', 'remove', 'リムーブ', '数字カードを1枚除外（最低10枚）'))
+  addCopies(7, () => makeCard('upgrade', 'remove', 'リムーブ', '数字カードを1枚除外（最低10枚）'))
   addCopies(3, () => makeCard('upgrade', 'oneTwoBeat', 'ワンツービート', '1・2・1/2の出現枚数を毎スピンVP加算'))
   addCopies(3, () => makeCard('upgrade', 'luckyNumber', 'ラッキーナンバー', '得点が最大になる1マスを自動で7に変更'))
   addCopies(3, () => makeCard('upgrade', 'bigNumber', 'ビッグナンバー', '得点が最大になる1マスを自動で+1'))
   addCopies(3, () => makeCard('upgrade', 'smallNumber', 'スモールナンバー', '得点が最大になる1マスを自動で-1/-2'))
-  addCopies(3, () => makeCard('upgrade', 'riskReturn', 'リスクリターン', '4種類以上の数字が出れば+5VP'))
 
   addCopies(4, () => makeCard('multiplier', 'horizontal1', '横倍率 ×1', '横の任意ラインを開放・強化', { orientation: 'horizontal', amount: 1 }))
   addCopies(4, () => makeCard('multiplier', 'vertical1', '縦倍率 ×1', '縦の任意ラインを開放・強化', { orientation: 'vertical', amount: 1 }))
@@ -520,9 +591,9 @@ function migrateState(value) {
   value.spinContext ||= null
   value.log ||= []
 
-  value.cardPool = value.cardPool.filter(isGrowthCard)
-  value.discardPile = value.discardPile.filter(isGrowthCard)
-  value.marketSets = value.marketSets.map(set => ({ ...set, cards: (set.cards || []).filter(isGrowthCard) }))
+  value.cardPool = normalizeGrowthCards(value.cardPool)
+  value.discardPile = normalizeGrowthCards(value.discardPile)
+  value.marketSets = value.marketSets.map(set => ({ ...set, cards: normalizeGrowthCards(set.cards) }))
   value.marketSets.forEach(set => {
     while (set.cards.length < 3 && value.cardPool.length) set.cards.push(value.cardPool.pop())
   })
@@ -545,8 +616,7 @@ function migrateState(value) {
     team.abilities.luckyNumber ||= 0
     team.abilities.bigNumber ||= 0
     team.abilities.smallNumber ||= 0
-    team.abilities.riskReturn ||= 0
-    team.hand = (team.hand || []).filter(isGrowthCard)
+    team.hand = normalizeGrowthCards(team.hand)
     team.nextRoundDouble = false
     team.nextRoundBonus = 0
     team.nextRoundBlocked = 0
@@ -562,7 +632,22 @@ function migrateState(value) {
 }
 
 function isGrowthCard(card) {
-  return card?.kind === 'number' || card?.kind === 'upgrade' || card?.kind === 'multiplier'
+  return card?.key !== 'riskReturn'
+    && (card?.kind === 'number' || card?.kind === 'upgrade' || card?.kind === 'multiplier')
+}
+
+function normalizeGrowthCards(cards) {
+  return (cards || [])
+    .map(card => card?.key === 'riskReturn'
+      ? {
+          ...card,
+          kind: 'upgrade',
+          key: 'remove',
+          title: 'リムーブ',
+          description: '数字カードを1枚除外（最低10枚）',
+        }
+      : card)
+    .filter(isGrowthCard)
 }
 
 function normalizeNumberDeck(deck) {
@@ -616,6 +701,11 @@ function undo() {
 function startGame() {
   setupError.value = ''
   const names = setup.names.slice(0, setup.teamCount).map(name => name.trim())
+  const targetVp = Number(setup.targetVp)
+  if (!Number.isInteger(targetVp) || targetVp < 10 || targetVp > 9999) {
+    setupError.value = '勝利VPは10〜9999の整数で入力してください。'
+    return
+  }
   if (names.some(name => !name)) {
     setupError.value = 'すべてのチーム名を入力してください。'
     return
@@ -629,7 +719,7 @@ function startGame() {
   Object.assign(state, {
     ...emptyState(),
     phase: 'initial-spin',
-    targetVp: setup.targetVp,
+    targetVp,
     customizeSeconds: setup.customizeSeconds,
     teams: names.map(makeTeam),
     cardPool: buildCardPool(),
@@ -836,7 +926,6 @@ function startCustomizeTimer() {
     if (customizeRemaining.value > 0) {
       customizeRemaining.value--
       if (customizeRemaining.value === 0) {
-        pendingUse.value = null
         stopCustomizeTimer()
       }
     } else stopCustomizeTimer()
@@ -856,7 +945,7 @@ function finishCustomize() {
 }
 
 function useCard(teamIndex, cardUid) {
-  if (state.phase !== 'customize' || customizeRemaining.value <= 0) return
+  if (state.phase !== 'customize') return
   const team = state.teams[teamIndex]
   const card = team.hand.find(item => item.uid === cardUid)
   if (!card) return
@@ -892,7 +981,7 @@ function useCard(teamIndex, cardUid) {
 
 function applyMultiplier(lineIndex) {
   const use = pendingUse.value
-  if (!use || customizeRemaining.value <= 0) return
+  if (!use || state.phase !== 'customize') return
   snapshot()
   const team = state.teams[use.teamIndex]
   team.lineMultipliers[lineIndex] += use.card.amount
@@ -903,7 +992,7 @@ function applyMultiplier(lineIndex) {
 
 function applyRemove(numberUid) {
   const use = pendingUse.value
-  if (!use || customizeRemaining.value <= 0) return
+  if (!use || state.phase !== 'customize') return
   const team = state.teams[use.teamIndex]
   if (team.numberDeck.length <= 10) return
   snapshot()
@@ -961,8 +1050,8 @@ async function animateReels(team, finalReels, runId) {
 async function animateTransformations(team, teamIndex, transformations, runId) {
   if (!transformations.length) return
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-  const chargeDelay = reducedMotion ? 220 : 520
-  const revealDelay = reducedMotion ? 220 : 480
+  const chargeDelay = reducedMotion ? 180 : 420
+  const revealDelay = reducedMotion ? 180 : 720
   for (const change of transformations) {
     if (runId !== spinRunId) return
     activeTransformation.value = { ...change, teamIndex, applied: false }
@@ -1000,13 +1089,10 @@ function calculateSpin(team, originalReels) {
   const lineResult = scoreReels(team, reels)
   const oneTwoCount = originalReels.filter(card => card?.key === 'wild12' || card?.value === 1 || card?.value === 2).length
   const oneTwoBonus = oneTwoCount * (team.abilities.oneTwoBeat || 0)
-  const distinct = new Set(originalReels.map(card => card?.key === 'wild12' ? '1/2' : card?.value)).size
-  const riskBonus = distinct >= 4 ? 5 * (team.abilities.riskReturn || 0) : 0
-  const points = lineResult.points + originalBonus + oneTwoBonus + riskBonus
+  const points = lineResult.points + originalBonus + oneTwoBonus
 
   if (originalBonus) notes.push(`出現+${originalBonus}`)
   if (oneTwoBonus) notes.push(`ワンツー+${oneTwoBonus}`)
-  if (riskBonus) notes.push(`リスクリターン+${riskBonus}`)
   const lineText = lineResult.hitCount ? `${lineResult.hitCount}ライン` : 'ラインなし'
   const noteText = notes.length ? `（${notes.join('、')}）` : ''
   return {
@@ -1103,13 +1189,28 @@ function numberCardLabel(card) {
   return card?.label || '–'
 }
 
-function deckSummary(team) {
-  const counts = team.numberDeck.reduce((result, card) => {
-    const label = numberCardLabel(card)
-    result[label] = (result[label] || 0) + 1
-    return result
-  }, {})
-  return Object.entries(counts).map(([label, count]) => `${label}×${count}`).join('、')
+function deckEntries(team) {
+  const order = ['1', 'wild12', '2', '3', '3p1', '3p2', '4', '5', '6', '7']
+  const entries = new Map()
+  team.numberDeck.forEach(card => {
+    const key = card.key || String(card.value)
+    const current = entries.get(key)
+    if (current) {
+      current.count++
+      return
+    }
+    entries.set(key, {
+      key,
+      label: numberCardLabel(card),
+      count: 1,
+      tone: card.bonus >= 2 ? 'bonus-two' : card.bonus > 0 ? 'bonus-one' : card.key === 'wild12' ? 'wild' : 'base',
+    })
+  })
+  return [...entries.values()].sort((left, right) => {
+    const leftOrder = order.indexOf(left.key)
+    const rightOrder = order.indexOf(right.key)
+    return (leftOrder < 0 ? order.length : leftOrder) - (rightOrder < 0 ? order.length : rightOrder)
+  })
 }
 
 function abilityBadges(team) {
@@ -1142,13 +1243,6 @@ function abilityBadges(team) {
       label: 'スモール',
       effect: `自動−1/−2 ${abilities.smallNumber || 0}回`,
       title: '得点が増える場合、レベル回数ぶん盤面を自動で-1または-2',
-    },
-    {
-      key: 'riskReturn',
-      icon: '🎲4',
-      label: 'リスク',
-      effect: `4種で+${5 * (abilities.riskReturn || 0)}VP`,
-      title: '4種類以上の数字が出たら、レベルごとに5VPを獲得',
     },
   ]
   return badges
@@ -1408,6 +1502,12 @@ onUnmounted(() => {
 .setup { max-width: 560px; display: grid; gap: 14px; }
 .setup h2, .quiz-console h2, .draft h2, .customize h2 { margin: 0; color: #ffd54f; }
 .choice-row, .setup-actions, .data-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.target-vp-field { display: grid; gap: 5px; color: #bcaaa4; }
+.target-vp-input { display: flex; align-items: center; gap: 8px; }
+.target-vp-input input { width: min(220px, 100%); padding: 11px 12px; border: 2px solid #7a5a24; border-radius: 8px; background: #1d1712; color: #fff; font-size: 1.15rem; font-weight: 900; }
+.target-vp-input input:focus { outline: 3px solid rgba(255,193,7,.3); border-color: #ffd54f; }
+.target-vp-input b { color: #ffd54f; }
+.target-vp-field small { color: #a99588; }
 button, .file-button { min-height: 44px; border: 1px solid rgba(255,255,255,.28); border-radius: 9px; padding: 10px 14px; background: rgba(255,255,255,.1); color: #fff; cursor: pointer; font-family: inherit; }
 button:hover:not(:disabled), .file-button:hover { border-color: #ffd54f; }
 button:disabled { opacity: .35; cursor: not-allowed; }
@@ -1421,6 +1521,18 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .status span { color: #d7c5b9; font-size: .67rem; font-weight: 700; }
 .status strong { color: #fff; font-size: .94rem; }
 .status button { min-height: 38px; padding: 7px 10px; }
+.credit-bank { --credit-columns: 3; max-width: 1180px; margin: 0 auto 10px; display: grid; grid-template-columns: repeat(var(--credit-columns), minmax(0, 1fr)); gap: 8px; padding: 9px; border-color: #72551c; background: linear-gradient(180deg, rgba(38,28,12,.96), rgba(17,14,10,.96)); }
+.credit-team { min-width: 0; padding: 8px 10px; border: 2px solid #514538; border-radius: 11px; background: #15110c; transition: border-color .2s, box-shadow .2s; }
+.credit-team.active { border-color: var(--team); box-shadow: inset 0 0 15px color-mix(in srgb, var(--team) 15%, transparent), 0 0 10px color-mix(in srgb, var(--team) 22%, transparent); }
+.credit-team__heading { display: flex; justify-content: space-between; align-items: center; gap: 7px; margin-bottom: 6px; }
+.credit-team__heading span { min-width: 0; overflow: hidden; color: var(--team); font-size: .69rem; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.credit-team__heading strong { flex: none; color: #ffe082; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .78rem; letter-spacing: .04em; }
+.credit-coins { min-height: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.credit-coins small { color: #776b5e; font-size: .62rem; font-weight: 900; letter-spacing: .12em; }
+.credit-coin { width: 22px; height: 22px; display: grid; flex: 0 0 22px; place-items: center; border: 2px solid #ffe082; border-radius: 50%; background: radial-gradient(circle at 35% 28%, #fff3b0 0 8%, #ffc928 35%, #b56a00 76%); color: #653600; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .62rem; font-weight: 1000; line-height: 1; box-shadow: inset 0 0 0 2px rgba(130,75,0,.28), 0 2px 4px rgba(0,0,0,.45); }
+.credit-coin-enter-active { animation: credit-in .32s cubic-bezier(.2,1.35,.35,1); }
+.credit-coin-leave-active { transition: transform .24s ease, opacity .24s ease; }
+.credit-coin-leave-to { opacity: 0; transform: translateY(-15px) rotate(80deg) scale(.35); }
 .quiz-console { text-align: center; }
 .quiz-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0; }
 .quiz-buttons button { min-height: 58px; font-size: 1rem; }
@@ -1463,16 +1575,20 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .resources strong { color: #fff; font-size: 1rem; }
 .reel-stage { position: relative; margin: 8px 0 5px; }
 .reels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 8px 0; }
-.reels span { position: relative; z-index: 4; aspect-ratio: 1.5; display: grid; place-items: center; border: 3px solid #5d4037; border-radius: 10px; background: linear-gradient(#fffef8, #e8ded5); color: #271810; font-size: clamp(1.55rem, 4vw, 2.5rem); font-weight: 1000; text-shadow: 0 1px #fff; }
+.reels span { position: relative; z-index: 4; aspect-ratio: 1.5; display: grid; place-items: center; overflow: hidden; border: 3px solid #5d4037; border-radius: 10px; background: linear-gradient(#fffef8, #e8ded5); color: #271810; font-size: clamp(1.55rem, 4vw, 2.5rem); font-weight: 1000; text-shadow: 0 1px #fff; }
 .teams--focus .team-card.active .reels span { aspect-ratio: 1.65; font-size: clamp(2rem, 5vw, 3rem); }
 .reels span.bonus { border-color: #00acc1; background: linear-gradient(145deg, #e0fbff, #8de5ef); color: #005662; box-shadow: inset 0 0 18px rgba(0,172,193,.22), 0 0 9px rgba(0,229,255,.42); }
 .reels span.bonus--two { border-color: #8e5be8; background: linear-gradient(145deg, #f5eaff, #cfadff); color: #4a148c; box-shadow: inset 0 0 18px rgba(126,87,194,.25), 0 0 10px rgba(179,136,255,.5); }
-.reels span.bonus::after { content: attr(data-bonus); position: absolute; top: 5px; right: 6px; padding: 2px 5px; border-radius: 99px; background: #007c91; color: #fff; font-size: .55rem; font-weight: 900; line-height: 1.2; text-shadow: none; }
+.reels span.bonus::after { content: attr(data-bonus); position: absolute; top: 5px; right: 6px; z-index: 6; padding: 2px 5px; border-radius: 99px; background: #007c91; color: #fff; font-size: .55rem; font-weight: 900; line-height: 1.2; text-shadow: none; }
 .reels span.bonus--two::after { background: #6a1b9a; }
 .reels span.hit { border-color: #ffb300; color: #d84315; box-shadow: 0 0 13px #ffb300; transform: scale(1.03); }
 .reels span.hit.bonus { box-shadow: 0 0 0 2px #00e5ff, 0 0 15px #ffb300; }
 .reels span.hit.bonus--two { box-shadow: 0 0 0 2px #ce93d8, 0 0 15px #ffb300; }
 .reel-value { font: inherit; color: inherit; }
+.reel-slip-window { position: absolute; inset: 0; z-index: 5; overflow: hidden; border-radius: inherit; }
+.reel-slip-strip { height: 200%; display: grid; grid-template-rows: repeat(2, 1fr); transform: translateY(0); transition: transform .62s cubic-bezier(.2,.9,.25,1.08); will-change: transform; }
+.reel-slip-strip--landed { transform: translateY(-50%); }
+.reel-slip-strip b { display: grid; place-items: center; min-height: 0; font: inherit; color: inherit; }
 .change-tag { position: absolute; left: 5px; bottom: 5px; z-index: 6; max-width: calc(100% - 10px); padding: 3px 6px; border-radius: 7px; background: #263238; color: #fff; font-size: .58rem; font-weight: 900; line-height: 1.15; text-shadow: none; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
 .reels span.transformed-cell { outline: 2px solid var(--transform-color, #90a4ae); outline-offset: -5px; }
 .reels span.transforming-cell { z-index: 7; animation: ability-transform .48s ease-in-out infinite alternate; }
@@ -1502,8 +1618,17 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .line-status span.enabled { border: 2px solid color-mix(in srgb, var(--team) 70%, #fff); color: #fff; background: color-mix(in srgb, var(--team) 18%, #17120f); font-weight: 800; }
 .teams--focus .team-card.active .line-status { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
 .teams--focus .team-card.active .line-status span { padding: 4px 5px; font-size: .65rem; }
-.deck-status { min-height: 1.25em; margin: 6px 0; color: #eee2da; font-size: .75rem; line-height: 1.35; }
-.deck-status strong { color: #ffd54f; }
+.deck-status { min-height: 1.25em; margin: 8px 0; padding: 8px; border: 1px solid #4e4038; border-radius: 10px; background: #181311; color: #eee2da; }
+.deck-status__heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.deck-status__heading strong { color: #ffd54f; font-size: .78rem; }
+.deck-status__heading span { color: #cdbdb3; font-size: .68rem; font-weight: 800; }
+.number-set { display: flex; flex-wrap: wrap; gap: 5px; }
+.number-set__chip { min-width: 49px; display: inline-flex; justify-content: center; align-items: center; gap: 4px; padding: 5px 7px; border: 2px solid #6d5a4e; border-radius: 8px; background: #fffaf2; color: #271810; line-height: 1; }
+.number-set__chip b { font-size: .9rem; }
+.number-set__chip em { color: #5d4037; font-size: .67rem; font-style: normal; font-weight: 900; }
+.number-set__chip--wild { border-color: #42a5f5; background: #e3f2fd; color: #0d47a1; }
+.number-set__chip--bonus-one { border-color: #00acc1; background: #dff9fc; color: #006064; }
+.number-set__chip--bonus-two { border-color: #8e5be8; background: #f2e7ff; color: #4a148c; }
 .ability-status { min-height: 27px; margin: 6px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: #eee2da; }
 .no-ability { color: #b7a69c; font-size: .72rem; }
 .ability-badge { --ability: #78909c; min-height: 25px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--ability) 76%, #fff); border-radius: 99px; background: color-mix(in srgb, var(--ability) 22%, #17120f); color: #fff; line-height: 1; box-shadow: inset 0 0 8px color-mix(in srgb, var(--ability) 15%, transparent); }
@@ -1515,7 +1640,6 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .ability-badge--luckyNumber { --ability: #43a047; }
 .ability-badge--bigNumber { --ability: #ef6c00; }
 .ability-badge--smallNumber { --ability: #00acc1; }
-.ability-badge--riskReturn { --ability: #8e24aa; }
 .result { min-height: 2em; margin: 7px 0; color: #ffe082; text-align: center; font-size: .94rem; font-weight: 700; }
 .result--confirmed { padding: 9px 7px; border: 2px solid #ffb300; border-radius: 9px; background: rgba(255,179,0,.15); font-size: 1.05rem; font-weight: 900; }
 .spin-button, .continue-button { width: 100%; min-height: 48px; background: linear-gradient(135deg, #ef6c00, #d84315); border: 2px solid #ffca28; font-size: 1rem; font-weight: 900; }
@@ -1537,8 +1661,10 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .hand-card { width: 100%; text-align: left; }
 .empty { color: #b7a69c; font-size: .8rem; }
 .customize { text-align: center; }
-.timer { margin: 14px auto; color: #ffd54f; font-size: clamp(2.5rem, 8vw, 5rem); font-weight: 900; }
-.timer.expired { color: #ef5350; }
+.timer-caption { display: block; margin-top: 10px; color: #cdbdb3; font-weight: 800; }
+.timer { margin: 4px auto 12px; color: #ffd54f; font-size: clamp(2.5rem, 8vw, 5rem); font-weight: 900; }
+.timer.expired { color: #ffb74d; }
+.timer-over { color: #ffe0b2; font-weight: 800; }
 .next-round-button { min-height: 52px; font-size: 1rem; }
 .choice-modal { position: fixed; left: 50%; bottom: 12px; z-index: 20; width: min(900px, calc(100% - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; transform: translateX(-50%); box-shadow: 0 8px 40px #000; text-align: center; }
 .choice-modal h2 { color: #ffd54f; }
@@ -1557,8 +1683,11 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 @keyframes reel-roll { 0% { transform: translateY(-3px); opacity: .7; } 50% { transform: translateY(3px); opacity: 1; } 100% { transform: translateY(-3px); opacity: .7; } }
 @keyframes lamp { to { opacity: .25; transform: scale(.7); } }
 @keyframes ability-transform { from { transform: scale(1); filter: brightness(1); } to { transform: scale(1.08) rotate(-1deg); filter: brightness(1.25); box-shadow: 0 0 22px var(--transform-color, #fff); } }
+@keyframes credit-in { from { opacity: 0; transform: translateY(-12px) rotate(-120deg) scale(.25); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .rolling-cell, .rolling-lamp, .team-card.winner, .transforming-cell { animation: none; }
+  .rolling-cell, .rolling-lamp, .team-card.winner, .transforming-cell, .credit-coin-enter-active { animation: none; }
+  .reel-slip-strip { transition: none; }
+  .credit-coin-leave-active { transition: none; }
 }
 @media (max-width: 980px) {
   .game-toolbar { grid-template-columns: 1fr; }
@@ -1576,6 +1705,11 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
   .teams, .card-sets { grid-template-columns: 1fr; }
   .status { gap: 10px; }
   .quiz-buttons { grid-template-columns: 1fr 1fr; }
+  .credit-bank { padding: 6px; gap: 5px; }
+  .credit-team { padding: 6px; }
+  .credit-team__heading { display: grid; gap: 2px; }
+  .credit-team__heading strong { font-size: .68rem; }
+  .credit-coin { width: 18px; height: 18px; flex-basis: 18px; border-width: 1px; font-size: .52rem; }
   .team-card { padding: 13px; }
   .reels span { aspect-ratio: 1.6; }
   .line-status, .line-upgrade-grid { grid-template-columns: repeat(2, 1fr); }
