@@ -7,12 +7,25 @@
         <h1>🎰 カスタムスロットミリオネア</h1>
       </div>
       <div class="header-actions">
-        <button class="bgm-button" :class="{ playing: bgmPlaying }" :aria-pressed="bgmPlaying" @click="toggleBgm">
-          {{ bgmPlaying ? '♫ BGM ON' : '♪ BGM OFF' }}
-        </button>
-        <button class="sfx-button" :class="{ playing: sfxEnabled }" :aria-pressed="sfxEnabled" @click="toggleSfx">
-          {{ sfxEnabled ? '🔊 SE ON' : '🔇 SE OFF' }}
-        </button>
+        <div class="audio-control">
+          <button class="bgm-button" :class="{ playing: bgmPlaying }" :aria-pressed="bgmPlaying" @click="toggleBgm">
+            <span>{{ bgmPlaying ? '♫ BGM ON' : '♪ BGM OFF' }}</span>
+            <small>{{ Math.round(bgmBpm) }} BPM</small>
+          </button>
+          <label title="BGM音量。最大300%まで増幅できます">
+            <input v-model.number="state.bgmVolume" type="range" min="0" max="300" step="10" aria-label="BGM音量" @change="previewAudio('bgm')" />
+            <output>{{ state.bgmVolume }}%</output>
+          </label>
+        </div>
+        <div class="audio-control">
+          <button class="sfx-button" :class="{ playing: sfxEnabled }" :aria-pressed="sfxEnabled" @click="toggleSfx">
+            {{ sfxEnabled ? '🔊 SE ON' : '🔇 SE OFF' }}
+          </button>
+          <label title="効果音音量。最大300%まで増幅できます">
+            <input v-model.number="state.sfxVolume" type="range" min="0" max="300" step="10" aria-label="効果音音量" @change="previewAudio('sfx')" />
+            <output>{{ state.sfxVolume }}%</output>
+          </label>
+        </div>
         <button class="ghost-button" @click="showGuide = !showGuide">ルール</button>
       </div>
     </header>
@@ -21,25 +34,34 @@
       <h2>使い方ガイド</h2>
       <ol>
         <li>開始時に全チームが1回ずつスロットを回します。</li>
-        <li>1ラウンド10問。正解したチームのクレジットコインが1枚増えます。</li>
+        <li>1ラウンド10問。正解したチームのクレジットコインが1枚増え、スルーした問題は没収ポットへ1枚入ります。</li>
         <li>10問終了後、獲得したクレジットの回数だけチームごとにスピンします。スピン開始時にコインを1枚消費します。</li>
         <li>全チームのスピン後、低VP順に3枚組の育成カードセットを選びます。</li>
         <li>相談時間の目安を見ながらナンバー・強化・倍率カードでスロットを育て、準備ができたら手動で次の10問へ進みます。</li>
       </ol>
       <p>妨害カードはありません。有効ラインで同じ数字が3個揃うと「数字×ライン倍率」のVPを獲得します。1/2カードはラインごとに1または2として扱えます。</p>
-      <p>PCではスピン中のチームを中央、他チームを左右の小型盤面で表示します。狭い画面では操作中のチームだけを表示します。</p>
-      <p>強化カードは効果とレベルを色分けバッジで表示します。リスクリターンは使用せず、リムーブは共有山札に7枚入ります。3（+1VP）は水色、3（+2VP）は紫色に光り、ライン成立とは別の出現VPだと分かります。</p>
+      <p>2〜4チームで対戦できます。PCではスピン中のチームを中央に大きく、全チームの小型盤面を左右へ最大2チームずつ表示します。狭い画面では操作中のチームだけを表示します。</p>
+      <p>強化カードは効果とレベルを色分けバッジで表示します。リスクリターンは使用せず、標準でリムーブ7枚と最大2枚を除外するダブルリムーブ2枚が入ります。3（+1VP）は水色、3（+2VP）は紫色に光り、ライン成立とは別の出現VPだと分かります。</p>
+      <p>カード名は大きく表示し、PCではカードへマウスを重ねるかキーボードで選ぶと効果説明が前面に出ます。タッチ端末では説明をカード内へ常時表示します。</p>
       <p>各チームの「現在の数字セット」には、数字カードの種類・枚数・合計枚数を表示します。</p>
+      <div class="card-count-help">
+        <strong>このゲームの共有カード構成（全{{ activeCardTotal }}枚）</strong>
+        <span v-for="item in cardConfigItems" :key="item.key">{{ item.shortTitle }} <b>{{ activeCardCounts[item.key] }}枚</b></span>
+      </div>
+      <p>共有カードの枚数は対戦設定の「共有カード枚数」で変更でき、保存・バックアップにも含まれます。</p>
+      <p>スピン待機中と結果確認中はEnterまたはSpaceキーで「回す」「次のスピンへ／次のチームへ」を進められます。キーボード入力として動くUSB／Bluetoothボタンと、ゲームパッドのAボタンにも対応します。</p>
+      <p>「📈 得点推移」から、各スピン終了時のチーム別累積VPを折れ線グラフで確認できます。グラフは必要なときだけ表示されます。</p>
       <p>勝利VPはプリセットのほか、10〜9999VPの整数を直接入力できます。</p>
       <p>ラッキー・ビッグ・スモールで数字が変わる場合は、元の数字で停止した後に専用SEと発光演出が入り、対象リールだけが滑って揃います。「変化前→変化後」は結果確認まで表示します。</p>
-      <p>BGMと回転・停止・当たりSEは画面上部から個別にON/OFFできます。最初の再生はボタン操作後に始まります。</p>
+      <p>BGMと回転・停止・当たりSEは画面上部から個別にON/OFF・0〜300%の音量調整ができます。100%が従来音量です。BGMは120 BPMから始まり、ラウンドごとに+5 BPM、先頭チームが目標VPの80%へ到達するとさらに+10 BPM、最大165 BPMまで滑らかに加速します。</p>
+      <p>7のライン成立時は通常当たり音にジャックポットSEを重ね、優勝確定時はBGMを止めて専用ファンファーレを再生します。どちらもSEのON/OFFと音量設定に従います。</p>
     </section>
 
     <section v-if="state.phase === 'setup'" class="setup panel">
       <h2>対戦設定</h2>
       <label>チーム数</label>
       <div class="choice-row">
-        <button v-for="number in [2, 3]" :key="number" :class="{ selected: setup.teamCount === number }" @click="setup.teamCount = number">{{ number }}チーム</button>
+        <button v-for="number in [2, 3, 4]" :key="number" :class="{ selected: setup.teamCount === number }" @click="setup.teamCount = number">{{ number }}チーム</button>
       </div>
       <label>勝利VP</label>
       <div class="choice-row">
@@ -63,6 +85,18 @@
           <input v-model.trim="setup.names[index]" maxlength="12" :placeholder="`チーム${index + 1}`" />
         </label>
       </div>
+      <details class="card-config">
+        <summary>共有カード枚数 <strong>全{{ setupCardTotal }}枚</strong></summary>
+        <p>カードドラフトで使う共有山札です。各0〜99枚で設定できます。</p>
+        <section v-for="group in CARD_CONFIG_GROUPS" :key="group.label" class="card-config__group">
+          <h3>{{ group.label }}</h3>
+          <label v-for="item in group.items" :key="item.key">
+            <span>{{ item.title }}</span>
+            <span class="card-count-input"><input v-model.number="setup.cardCounts[item.key]" type="number" min="0" max="99" step="1" inputmode="numeric" :aria-label="`${item.title}の枚数`" /><b>枚</b></span>
+          </label>
+        </section>
+        <button type="button" class="secondary" @click="resetCardCounts">標準枚数に戻す</button>
+      </details>
       <p v-if="setupError" class="error">{{ setupError }}</p>
       <div class="setup-actions">
         <button v-if="hasSave" class="secondary" @click="resumeGame">保存したゲームを再開</button>
@@ -82,6 +116,7 @@
           <div><span>ラウンド</span><strong>{{ state.roundNumber || '初回' }}</strong></div>
           <div v-if="state.phase === 'quiz'"><span>問題</span><strong>{{ state.questionInRound + 1 }} / 10</strong></div>
           <div><span>目標</span><strong>{{ state.targetVp }} VP</strong></div>
+          <button class="score-chart-button" @click="showScoreChart = true">📈 得点推移</button>
           <button class="ghost-button" :disabled="!history.length || state.phase === 'rolling'" @click="undo">↶ 取り消し</button>
           <button class="ghost-button" :disabled="state.phase === 'rolling'" @click="confirmReset">新しいゲーム</button>
         </section>
@@ -115,6 +150,16 @@
             <small v-if="displayedCredits(team, index) === 0" key="empty">NO CREDIT</small>
           </TransitionGroup>
         </article>
+        <article class="pass-vault" aria-label="スルーで没収されたコイン">
+          <div class="pass-vault__heading">
+            <span>HOUSE · スルー没収ポット</span>
+            <strong>{{ state.roundPasses }}枚</strong>
+          </div>
+          <TransitionGroup tag="div" name="confiscated-coin" class="confiscated-coins" aria-live="polite">
+            <span v-for="coin in state.roundPasses" :key="coin" class="confiscated-coin" aria-hidden="true">×</span>
+            <small v-if="state.roundPasses === 0" key="empty">スルーなし</small>
+          </TransitionGroup>
+        </article>
       </section>
 
       <section v-if="state.phase === 'quiz'" class="quiz-console panel">
@@ -127,10 +172,11 @@
             :style="{ '--team': team.color }"
             @click="recordQuestion(index)"
           >✓ {{ team.name }}</button>
-          <button class="secondary" @click="recordQuestion(null)">正解チームなし</button>
+          <button class="pass-button" @click="recordQuestion(null)">⬇ スルー（コイン没収）</button>
         </div>
         <div class="round-corrects">
           <span v-for="team in state.teams" :key="team.id">{{ team.name }} <strong>{{ team.roundCorrect }}問</strong></span>
+          <span class="pass-summary">没収 <strong>{{ state.roundPasses }}枚</strong></span>
         </div>
       </section>
 
@@ -144,10 +190,19 @@
         <div class="card-sets">
           <button v-for="set in state.marketSets" :key="set.id" class="card-set" @click="chooseCardSet(set.id)">
             <span class="set-label">SET {{ set.label }}</span>
-            <span v-for="card in set.cards" :key="card.uid" class="mini-card" :class="`card--${card.kind}`">
+            <span
+              v-for="card in set.cards"
+              :key="card.uid"
+              class="mini-card"
+              :class="`card--${card.kind}`"
+              :title="card.description"
+              :data-tooltip="card.description"
+              role="group"
+              :aria-label="`${cardKindLabel(card)} ${card.title}：${card.description}`"
+            >
               <span class="card-kind">{{ cardKindLabel(card) }}</span>
               <strong>{{ card.title }}</strong>
-              <small>{{ card.description }}</small>
+              <small class="card-description">{{ card.description }}</small>
             </span>
           </button>
         </div>
@@ -166,14 +221,28 @@
       </section>
 
       <section class="teams" :class="{ 'teams--focus': state.activeTeamIndex !== null }">
+        <aside v-if="state.activeTeamIndex !== null" class="focus-side focus-side--left" aria-label="左側チーム一覧">
+          <article
+            v-for="entry in leftFocusTeams"
+            :key="`left-${entry.team.id}`"
+            class="focus-team"
+            :class="{ active: state.activeTeamIndex === entry.index }"
+            :style="{ '--team': entry.team.color }"
+          >
+            <div class="focus-team__heading"><span>TEAM {{ entry.index + 1 }}</span><strong>{{ entry.team.vp }} VP</strong></div>
+            <h3>{{ entry.team.name }}</h3>
+            <div class="focus-mini-reels" aria-hidden="true">
+              <span v-for="(card, reelIndex) in entry.team.reels" :key="reelIndex" :class="{ hit: entry.team.hitCells.includes(reelIndex), bonus: card?.bonus > 0, 'bonus--two': card?.bonus >= 2 }">{{ card ? numberCardLabel(card) : '–' }}</span>
+            </div>
+            <div class="focus-team__footer"><span>● {{ displayedCredits(entry.team, entry.index) }}</span><span>{{ entry.team.hand.length }} CARD</span></div>
+          </article>
+        </aside>
         <article
           v-for="(team, index) in state.teams"
           :key="team.id"
           class="team-card"
           :class="{
             active: state.activeTeamIndex === index,
-            'team-card--left': focusedTeamPosition(index) === 'left',
-            'team-card--right': focusedTeamPosition(index) === 'right',
             winner: state.phase === 'finished' && team.vp === winner?.vp,
           }"
           :style="{ '--team': team.color }"
@@ -289,8 +358,9 @@
           <button
             v-if="state.phase === 'spin-turn' && state.activeTeamIndex === index"
             class="spin-button"
+            aria-keyshortcuts="Enter Space"
             @click="spinOnce(index)"
-          >🎰 スピンする（残り{{ team.spinRightsRemaining }}回）</button>
+          >🎰 スピンする（残り{{ team.spinRightsRemaining }}回）<small>Enter / Space / 外部ボタン</small></button>
 
           <div v-else-if="state.phase === 'rolling' && state.activeTeamIndex === index" class="rolling-message">
             <span class="rolling-lamp"></span>
@@ -300,8 +370,9 @@
           <button
             v-else-if="state.phase === 'spin-result' && state.activeTeamIndex === index"
             class="continue-button"
+            aria-keyshortcuts="Enter Space"
             @click="continueSpin"
-          >{{ team.spinRightsRemaining > 0 ? `次のスピンへ（残り${team.spinRightsRemaining}回）` : '次のチームへ' }} →</button>
+          >{{ team.spinRightsRemaining > 0 ? `次のスピンへ（残り${team.spinRightsRemaining}回）` : '次のチームへ' }} →<small>Enter / Space / 外部ボタン</small></button>
 
           <div v-if="state.phase === 'customize'" class="hand">
             <h3>所持カード</h3>
@@ -311,14 +382,33 @@
               :key="card.uid"
               class="hand-card"
               :class="`card--${card.kind}`"
+              :title="card.description"
+              :data-tooltip="card.description"
+              :aria-label="`${cardKindLabel(card)} ${card.title}：${card.description}`"
               @click="useCard(index, card.uid)"
             >
               <span class="card-kind">{{ cardKindLabel(card) }}</span>
               <strong>{{ card.title }}</strong>
-              <small>{{ card.description }}</small>
+              <small class="card-description">{{ card.description }}</small>
             </button>
           </div>
         </article>
+        <aside v-if="state.activeTeamIndex !== null" class="focus-side focus-side--right" aria-label="右側チーム一覧">
+          <article
+            v-for="entry in rightFocusTeams"
+            :key="`right-${entry.team.id}`"
+            class="focus-team"
+            :class="{ active: state.activeTeamIndex === entry.index }"
+            :style="{ '--team': entry.team.color }"
+          >
+            <div class="focus-team__heading"><span>TEAM {{ entry.index + 1 }}</span><strong>{{ entry.team.vp }} VP</strong></div>
+            <h3>{{ entry.team.name }}</h3>
+            <div class="focus-mini-reels" aria-hidden="true">
+              <span v-for="(card, reelIndex) in entry.team.reels" :key="reelIndex" :class="{ hit: entry.team.hitCells.includes(reelIndex), bonus: card?.bonus > 0, 'bonus--two': card?.bonus >= 2 }">{{ card ? numberCardLabel(card) : '–' }}</span>
+            </div>
+            <div class="focus-team__footer"><span>● {{ displayedCredits(entry.team, entry.index) }}</span><span>{{ entry.team.hand.length }} CARD</span></div>
+          </article>
+        </aside>
       </section>
 
       <section v-if="pendingUse?.mode === 'line'" class="choice-modal panel">
@@ -334,18 +424,72 @@
 
       <section v-if="pendingUse?.mode === 'remove'" class="choice-modal panel">
         <h2>リムーブする数字カード</h2>
-        <p>山札は10枚未満にできません。</p>
+        <p>{{ pendingUse.card.title }}：あと{{ pendingUse.remaining }}枚選択できます。山札は10枚未満にできません。</p>
         <div class="remove-grid">
           <button v-for="card in pendingTeam.numberDeck" :key="card.uid" @click="applyRemove(card.uid)">{{ numberCardLabel(card) }}</button>
         </div>
-        <button class="secondary" @click="pendingUse = null">キャンセル</button>
+        <button v-if="pendingUse.removed === 0" class="secondary" @click="pendingUse = null">キャンセル</button>
+      </section>
+
+      <section v-if="showScoreChart" class="score-chart-modal panel" role="dialog" aria-modal="true" aria-labelledby="score-chart-title">
+        <div class="score-chart-heading">
+          <div>
+            <p class="quiz-kicker">SCORE HISTORY</p>
+            <h2 id="score-chart-title">チーム別 得点推移</h2>
+          </div>
+          <button class="ghost-button" @click="showScoreChart = false">閉じる ×</button>
+        </div>
+        <div class="score-chart-legend" aria-label="現在のチーム得点">
+          <span v-for="(team, index) in state.teams" :key="team.id" :style="{ '--team': team.color }">
+            <i></i><b>{{ team.name }}</b><strong>{{ team.vp }} VP</strong>
+          </span>
+        </div>
+        <div class="score-chart-scroll">
+          <svg
+            class="score-chart"
+            :viewBox="`0 0 ${scoreChartWidth} ${SCORE_CHART_HEIGHT}`"
+            :style="{ width: `${scoreChartWidth}px` }"
+            role="img"
+            aria-label="各スピン後のチーム別累積VP折れ線グラフ"
+          >
+            <g class="score-grid">
+              <g v-for="value in scoreGridValues" :key="value">
+                <line :x1="SCORE_CHART_LEFT" :x2="scoreChartWidth - SCORE_CHART_RIGHT" :y1="scoreY(value)" :y2="scoreY(value)" />
+                <text :x="SCORE_CHART_LEFT - 10" :y="scoreY(value) + 4">{{ value }}</text>
+              </g>
+            </g>
+            <g class="score-axis-labels">
+              <g v-for="(entry, pointIndex) in state.scoreHistory" :key="entry.id || pointIndex">
+                <line :x1="scoreX(pointIndex)" :x2="scoreX(pointIndex)" :y1="SCORE_CHART_BOTTOM" :y2="SCORE_CHART_BOTTOM + 5" />
+                <text :x="scoreX(pointIndex)" :y="SCORE_CHART_BOTTOM + 19" text-anchor="middle">{{ entry.label }}</text>
+              </g>
+            </g>
+            <g v-for="(team, teamIndex) in state.teams" :key="team.id" class="score-team-line">
+              <polyline :points="scorePolyline(teamIndex)" :style="{ stroke: team.color }" />
+              <circle
+                v-for="(entry, pointIndex) in state.scoreHistory"
+                :key="`${team.id}-${entry.id || pointIndex}`"
+                :cx="scoreX(pointIndex)"
+                :cy="scoreY(entry.scores[teamIndex] || 0)"
+                r="4"
+                :style="{ fill: team.color }"
+              >
+                <title>{{ entry.label }}・{{ team.name }}：{{ entry.scores[teamIndex] || 0 }}VP</title>
+              </circle>
+            </g>
+          </svg>
+        </div>
+        <p class="score-chart-note">各スピンの得点確定後に記録します。横へスクロールすると過去の全スピンを確認できます。</p>
       </section>
 
       <section v-if="state.phase === 'finished' && winner" class="winner-banner">
         <span>🏆 WINNER</span>
         <strong>{{ winner.name }}</strong>
         <p>{{ winner.vp }} VP</p>
-        <button @click="confirmReset">もう一度遊ぶ</button>
+        <div class="winner-actions">
+          <button @click="showScoreChart = true">📈 得点推移を見る</button>
+          <button @click="confirmReset">もう一度遊ぶ</button>
+        </div>
       </section>
 
       <details class="log panel">
@@ -364,12 +508,71 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 
 const emit = defineEmits(['back'])
 const STORAGE_KEY = 'piyopiyo_custom_slot_v1'
-const COLORS = ['#ffb300', '#42a5f5', '#ef5350']
+const COLORS = ['#ffb300', '#42a5f5', '#ef5350', '#66bb6a']
 const QUESTIONS_PER_ROUND = 10
+const SCORE_CHART_HEIGHT = 330
+const SCORE_CHART_LEFT = 52
+const SCORE_CHART_RIGHT = 24
+const SCORE_CHART_TOP = 20
+const SCORE_CHART_BOTTOM = 278
+const BGM_BASE_BPM = 120
+const BGM_MAX_BPM = 165
+const BGM_ROUND_BONUS = 5
+const BGM_FINAL_STRETCH_BONUS = 10
+const DEFAULT_CARD_COUNTS = Object.freeze({
+  wild12: 8,
+  '3p1': 8,
+  '3p2': 8,
+  7: 8,
+  remove: 7,
+  doubleRemove: 2,
+  oneTwoBeat: 3,
+  luckyNumber: 3,
+  bigNumber: 3,
+  smallNumber: 3,
+  horizontal1: 4,
+  vertical1: 4,
+  vertical2: 3,
+  diagonal1: 4,
+  diagonal2: 3,
+})
+const CARD_CONFIG_GROUPS = [
+  {
+    label: 'ナンバーカード',
+    items: [
+      { key: 'wild12', title: '1/2', shortTitle: '1/2' },
+      { key: '3p1', title: '3（+1VP）', shortTitle: '3+1' },
+      { key: '3p2', title: '3（+2VP）', shortTitle: '3+2' },
+      { key: '7', title: '7', shortTitle: '7' },
+    ],
+  },
+  {
+    label: '強化カード',
+    items: [
+      { key: 'remove', title: 'リムーブ', shortTitle: 'リムーブ' },
+      { key: 'doubleRemove', title: 'ダブルリムーブ', shortTitle: 'ダブルリムーブ' },
+      { key: 'oneTwoBeat', title: 'ワンツービート', shortTitle: 'ワンツー' },
+      { key: 'luckyNumber', title: 'ラッキーナンバー', shortTitle: 'ラッキー' },
+      { key: 'bigNumber', title: 'ビッグナンバー', shortTitle: 'ビッグ' },
+      { key: 'smallNumber', title: 'スモールナンバー', shortTitle: 'スモール' },
+    ],
+  },
+  {
+    label: '倍率カード',
+    items: [
+      { key: 'horizontal1', title: '横 ×1', shortTitle: '横×1' },
+      { key: 'vertical1', title: '縦 ×1', shortTitle: '縦×1' },
+      { key: 'vertical2', title: '縦 ×2', shortTitle: '縦×2' },
+      { key: 'diagonal1', title: '斜め ×1', shortTitle: '斜め×1' },
+      { key: 'diagonal2', title: '斜め ×2', shortTitle: '斜め×2' },
+    ],
+  },
+]
+const cardConfigItems = CARD_CONFIG_GROUPS.flatMap(group => group.items)
 const LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
@@ -397,9 +600,11 @@ const setup = reactive({
   teamCount: 3,
   targetVp: 100,
   customizeSeconds: 90,
-  names: ['オレンジ', 'ブルー', 'レッド'],
+  names: ['オレンジ', 'ブルー', 'レッド', 'グリーン'],
+  cardCounts: { ...DEFAULT_CARD_COUNTS },
 })
 const showGuide = ref(false)
+const showScoreChart = ref(false)
 const setupError = ref('')
 const dataError = ref('')
 const history = reactive([])
@@ -410,6 +615,7 @@ const lastTransformations = ref({})
 const customizeRemaining = ref(90)
 const pendingUse = ref(null)
 const bgmPlaying = ref(false)
+const bgmBpm = ref(BGM_BASE_BPM)
 const sfxEnabled = ref(true)
 let spinRunId = 0
 let customizeTimer = null
@@ -418,6 +624,8 @@ let bgmTimer = null
 let bgmStep = 0
 let reelSoundTimer = null
 let reelSoundStep = 0
+let gamepadAnimationFrame = null
+const gamepadButtonStates = new Map()
 
 const saved = loadSaved()
 const hasSave = ref(Boolean(saved))
@@ -445,6 +653,24 @@ const winner = computed(() => state.phase === 'finished'
 const draftTeam = computed(() => state.teams[state.draftOrder?.[state.draftCursor]] || null)
 const pendingTeam = computed(() => pendingUse.value ? state.teams[pendingUse.value.teamIndex] : null)
 const showCreditBank = computed(() => ['quiz', 'spin-turn', 'rolling', 'spin-result'].includes(state.phase))
+const focusTeamEntries = computed(() => state.teams.map((team, index) => ({ team, index })))
+const focusTeamSplit = computed(() => Math.ceil(focusTeamEntries.value.length / 2))
+const leftFocusTeams = computed(() => focusTeamEntries.value.slice(0, focusTeamSplit.value))
+const rightFocusTeams = computed(() => focusTeamEntries.value.slice(focusTeamSplit.value))
+const activeCardCounts = computed(() => state.phase === 'setup' ? setup.cardCounts : state.cardCounts)
+const setupCardTotal = computed(() => cardCountTotal(setup.cardCounts))
+const activeCardTotal = computed(() => cardCountTotal(activeCardCounts.value))
+const targetBgmBpm = computed(() => {
+  const highestVp = Math.max(0, ...state.teams.map(team => Number(team.vp) || 0))
+  const finalStretch = state.targetVp > 0 && highestVp >= state.targetVp * 0.8 ? BGM_FINAL_STRETCH_BONUS : 0
+  return Math.min(BGM_MAX_BPM, BGM_BASE_BPM + Math.max(0, state.roundNumber) * BGM_ROUND_BONUS + finalStretch)
+})
+const scoreChartWidth = computed(() => Math.max(760, SCORE_CHART_LEFT + SCORE_CHART_RIGHT + Math.max(1, state.scoreHistory.length - 1) * 72))
+const scoreChartMax = computed(() => {
+  const highest = Math.max(0, ...state.scoreHistory.flatMap(entry => entry.scores || []))
+  return Math.max(20, Math.ceil(highest / 20) * 20)
+})
+const scoreGridValues = computed(() => Array.from({ length: 5 }, (_, index) => scoreChartMax.value / 4 * index))
 
 function displayedCredits(team, teamIndex) {
   if (state.phase === 'quiz') return Math.max(0, Number(team.roundCorrect) || 0)
@@ -452,6 +678,64 @@ function displayedCredits(team, teamIndex) {
   return state.phase === 'rolling' && state.activeTeamIndex === teamIndex
     ? Math.max(0, credits - 1)
     : credits
+}
+
+function scoreX(pointIndex) {
+  if (state.scoreHistory.length <= 1) return SCORE_CHART_LEFT
+  const drawableWidth = scoreChartWidth.value - SCORE_CHART_LEFT - SCORE_CHART_RIGHT
+  return SCORE_CHART_LEFT + drawableWidth * pointIndex / (state.scoreHistory.length - 1)
+}
+
+function scoreY(value) {
+  const drawableHeight = SCORE_CHART_BOTTOM - SCORE_CHART_TOP
+  return SCORE_CHART_BOTTOM - drawableHeight * Math.max(0, Number(value) || 0) / scoreChartMax.value
+}
+
+function scorePolyline(teamIndex) {
+  return state.scoreHistory.map((entry, pointIndex) => `${scoreX(pointIndex)},${scoreY(entry.scores?.[teamIndex] || 0)}`).join(' ')
+}
+
+function triggerSpinAction() {
+  if (showScoreChart.value) return
+  const teamIndex = state.activeTeamIndex
+  if (!Number.isInteger(teamIndex)) return
+  if (state.phase === 'spin-turn') spinOnce(teamIndex)
+  else if (state.phase === 'spin-result') continueSpin()
+}
+
+function handleSpinShortcut(event) {
+  if (event.key === 'Escape' && showScoreChart.value) {
+    showScoreChart.value = false
+    return
+  }
+  if (showScoreChart.value) return
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
+  const isSpinKey = event.key === 'Enter' || event.key === ' ' || event.code === 'Space'
+  if (!isSpinKey || !['spin-turn', 'spin-result'].includes(state.phase)) return
+  const target = event.target
+  if (target instanceof Element && target.closest('input, textarea, select, button, a, [contenteditable="true"]')) return
+  event.preventDefault()
+  triggerSpinAction()
+}
+
+function pollGamepads() {
+  gamepadAnimationFrame = null
+  const gamepads = navigator.getGamepads?.() || []
+  let hasGamepad = false
+  for (const gamepad of gamepads) {
+    if (!gamepad) continue
+    hasGamepad = true
+    const pressed = Boolean(gamepad.buttons?.[0]?.pressed)
+    const wasPressed = Boolean(gamepadButtonStates.get(gamepad.index))
+    if (pressed && !wasPressed) triggerSpinAction()
+    gamepadButtonStates.set(gamepad.index, pressed)
+  }
+  if (hasGamepad) gamepadAnimationFrame = window.requestAnimationFrame(pollGamepads)
+  else gamepadButtonStates.clear()
+}
+
+function startGamepadPolling() {
+  if (gamepadAnimationFrame === null) gamepadAnimationFrame = window.requestAnimationFrame(pollGamepads)
 }
 
 watch(state, saveState, { deep: true })
@@ -462,15 +746,19 @@ watch(() => state.phase, phase => {
 
 function emptyState() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 7,
     phase: 'setup',
     targetVp: 100,
     customizeSeconds: 90,
+    bgmVolume: 100,
+    sfxVolume: 100,
     roundNumber: 0,
     questionInRound: 0,
     questionCount: 0,
+    roundPasses: 0,
     activeTeamIndex: null,
     teams: [],
+    cardCounts: { ...DEFAULT_CARD_COUNTS },
     cardPool: [],
     discardPile: [],
     marketSets: [],
@@ -479,6 +767,7 @@ function emptyState() {
     spinOrder: [],
     spinCursor: 0,
     spinContext: null,
+    scoreHistory: [],
     log: [],
   }
 }
@@ -536,28 +825,30 @@ function makeCard(kind, key, title, description, extra = {}) {
   return { uid: `card-${nextUid()}`, kind, key, title, description, ...extra }
 }
 
-function buildCardPool() {
+function buildCardPool(cardCounts = DEFAULT_CARD_COUNTS) {
+  const counts = normalizeCardCounts(cardCounts)
   const cards = []
   const addCopies = (count, factory) => {
     for (let index = 0; index < count; index++) cards.push(factory(index))
   }
 
-  addCopies(8, () => makeCard('number', 'wild12', '1/2', 'ラインごとに1または2として扱う', { numberCard: { key: 'wild12', value: null, bonus: 0, label: '1/2' } }))
-  addCopies(8, () => makeCard('number', '3p1', '3（+1VP）', '出現するだけで+1VP。ライン上は3', { numberCard: { key: '3p1', value: 3, bonus: 1, label: '3⁺¹' } }))
-  addCopies(8, () => makeCard('number', '3p2', '3（+2VP）', '出現するだけで+2VP。ライン上は3', { numberCard: { key: '3p2', value: 3, bonus: 2, label: '3⁺²' } }))
-  addCopies(8, () => makeCard('number', '7', '7', '高配当の7を山札へ追加', { numberCard: { key: '7', value: 7, bonus: 0, label: '7' } }))
+  addCopies(counts.wild12, () => makeCard('number', 'wild12', '1/2', 'ラインごとに1または2として扱う', { numberCard: { key: 'wild12', value: null, bonus: 0, label: '1/2' } }))
+  addCopies(counts['3p1'], () => makeCard('number', '3p1', '3（+1VP）', '出現するだけで+1VP。ライン上は3', { numberCard: { key: '3p1', value: 3, bonus: 1, label: '3⁺¹' } }))
+  addCopies(counts['3p2'], () => makeCard('number', '3p2', '3（+2VP）', '出現するだけで+2VP。ライン上は3', { numberCard: { key: '3p2', value: 3, bonus: 2, label: '3⁺²' } }))
+  addCopies(counts['7'], () => makeCard('number', '7', '7', '高配当の7を山札へ追加', { numberCard: { key: '7', value: 7, bonus: 0, label: '7' } }))
 
-  addCopies(7, () => makeCard('upgrade', 'remove', 'リムーブ', '数字カードを1枚除外（最低10枚）'))
-  addCopies(3, () => makeCard('upgrade', 'oneTwoBeat', 'ワンツービート', '1・2・1/2の出現枚数を毎スピンVP加算'))
-  addCopies(3, () => makeCard('upgrade', 'luckyNumber', 'ラッキーナンバー', '得点が最大になる1マスを自動で7に変更'))
-  addCopies(3, () => makeCard('upgrade', 'bigNumber', 'ビッグナンバー', '得点が最大になる1マスを自動で+1'))
-  addCopies(3, () => makeCard('upgrade', 'smallNumber', 'スモールナンバー', '得点が最大になる1マスを自動で-1/-2'))
+  addCopies(counts.remove, () => makeCard('upgrade', 'remove', 'リムーブ', '数字カードを1枚除外（最低10枚）'))
+  addCopies(counts.doubleRemove, () => makeCard('upgrade', 'doubleRemove', 'ダブルリムーブ', '数字カードを最大2枚除外（最低10枚）'))
+  addCopies(counts.oneTwoBeat, () => makeCard('upgrade', 'oneTwoBeat', 'ワンツービート', '1・2・1/2が2枚出るごとに、レベル分のVPを加算'))
+  addCopies(counts.luckyNumber, () => makeCard('upgrade', 'luckyNumber', 'ラッキーナンバー', '得点が最大になる1マスを自動で7に変更'))
+  addCopies(counts.bigNumber, () => makeCard('upgrade', 'bigNumber', 'ビッグナンバー', '得点が最大になる1マスを自動で+1'))
+  addCopies(counts.smallNumber, () => makeCard('upgrade', 'smallNumber', 'スモールナンバー', '得点が最大になる1マスを自動で-1/-2'))
 
-  addCopies(4, () => makeCard('multiplier', 'horizontal1', '横倍率 ×1', '横の任意ラインを開放・強化', { orientation: 'horizontal', amount: 1 }))
-  addCopies(4, () => makeCard('multiplier', 'vertical1', '縦倍率 ×1', '縦の任意ラインを開放・強化', { orientation: 'vertical', amount: 1 }))
-  addCopies(3, () => makeCard('multiplier', 'vertical2', '縦倍率 ×2', '縦の任意ラインを×2強化', { orientation: 'vertical', amount: 2 }))
-  addCopies(4, () => makeCard('multiplier', 'diagonal1', '斜め倍率 ×1', '斜めの任意ラインを開放・強化', { orientation: 'diagonal', amount: 1 }))
-  addCopies(3, () => makeCard('multiplier', 'diagonal2', '斜め倍率 ×2', '斜めの任意ラインを×2強化', { orientation: 'diagonal', amount: 2 }))
+  addCopies(counts.horizontal1, () => makeCard('multiplier', 'horizontal1', '横倍率 ×1', '横の任意ラインを開放・強化', { orientation: 'horizontal', amount: 1 }))
+  addCopies(counts.vertical1, () => makeCard('multiplier', 'vertical1', '縦倍率 ×1', '縦の任意ラインを開放・強化', { orientation: 'vertical', amount: 1 }))
+  addCopies(counts.vertical2, () => makeCard('multiplier', 'vertical2', '縦倍率 ×2', '縦の任意ラインを×2強化', { orientation: 'vertical', amount: 2 }))
+  addCopies(counts.diagonal1, () => makeCard('multiplier', 'diagonal1', '斜め倍率 ×1', '斜めの任意ラインを開放・強化', { orientation: 'diagonal', amount: 1 }))
+  addCopies(counts.diagonal2, () => makeCard('multiplier', 'diagonal2', '斜め倍率 ×2', '斜めの任意ラインを×2強化', { orientation: 'diagonal', amount: 2 }))
 
   return shuffled(cards)
 }
@@ -575,13 +866,24 @@ function loadSaved() {
 
 function migrateState(value) {
   const previousSchemaVersion = Number(value.schemaVersion) || 1
-  value.schemaVersion = 3
+  const hadCardPool = Array.isArray(value.cardPool)
+  value.schemaVersion = 7
   value.targetVp ||= 100
   value.customizeSeconds ||= 90
+  value.bgmVolume = normalizeAudioVolume(value.bgmVolume)
+  value.sfxVolume = normalizeAudioVolume(value.sfxVolume)
   value.roundNumber ??= previousSchemaVersion < 2 ? 1 : 0
   value.questionInRound ||= 0
   value.questionCount ||= 0
-  value.cardPool ||= buildCardPool()
+  value.roundPasses = Math.max(0, Number(value.roundPasses) || 0)
+  value.cardCounts = normalizeCardCounts(value.cardCounts)
+  value.cardPool ||= buildCardPool(value.cardCounts)
+  if (previousSchemaVersion < 5 && hadCardPool) {
+    for (let index = 0; index < value.cardCounts.doubleRemove; index++) {
+      value.cardPool.push(makeCard('upgrade', 'doubleRemove', 'ダブルリムーブ', '数字カードを最大2枚除外（最低10枚）'))
+    }
+    value.cardPool = shuffled(value.cardPool)
+  }
   value.discardPile ||= []
   value.marketSets ||= []
   value.draftOrder ||= []
@@ -629,6 +931,20 @@ function migrateState(value) {
     team.hitCells ||= []
     team.lastResult ||= ''
   })
+  value.scoreHistory = Array.isArray(value.scoreHistory)
+    ? value.scoreHistory.map((entry, index) => ({
+        id: entry.id || `score-${nextUid()}-${index}`,
+        label: entry.label || `${index}`,
+        scores: value.teams.map((_, teamIndex) => Math.max(0, Number(entry.scores?.[teamIndex]) || 0)),
+      }))
+    : []
+  if (!value.scoreHistory.length && value.teams.length) {
+    value.scoreHistory.push({
+      id: `score-${nextUid()}`,
+      label: previousSchemaVersion < 7 ? '移行時点' : '開始',
+      scores: value.teams.map(team => Math.max(0, Number(team.vp) || 0)),
+    })
+  }
 }
 
 function isGrowthCard(card) {
@@ -638,15 +954,24 @@ function isGrowthCard(card) {
 
 function normalizeGrowthCards(cards) {
   return (cards || [])
-    .map(card => card?.key === 'riskReturn'
-      ? {
+    .map(card => {
+      if (card?.key === 'riskReturn') {
+        return {
           ...card,
           kind: 'upgrade',
           key: 'remove',
           title: 'リムーブ',
           description: '数字カードを1枚除外（最低10枚）',
         }
-      : card)
+      }
+      if (card?.key === 'oneTwoBeat') {
+        return {
+          ...card,
+          description: '1・2・1/2が2枚出るごとに、レベル分のVPを加算',
+        }
+      }
+      return card
+    })
     .filter(isGrowthCard)
 }
 
@@ -666,6 +991,26 @@ function normalizeNumberCard(card, fallbackId) {
   const value = Number(card)
   if (!Number.isFinite(value)) return null
   return { uid: `${fallbackId}-${nextUid()}`, key: String(value), value, bonus: 0, label: String(value), basic: true }
+}
+
+function normalizeCardCounts(cardCounts) {
+  return Object.fromEntries(cardConfigItems.map(item => {
+    const value = Number(cardCounts?.[item.key])
+    return [item.key, Number.isInteger(value) && value >= 0 && value <= 99 ? value : DEFAULT_CARD_COUNTS[item.key]]
+  }))
+}
+
+function normalizeAudioVolume(value) {
+  const volume = Number(value)
+  return Number.isFinite(volume) ? Math.min(300, Math.max(0, Math.round(volume / 10) * 10)) : 100
+}
+
+function cardCountTotal(cardCounts) {
+  return cardConfigItems.reduce((total, item) => total + (Number(cardCounts?.[item.key]) || 0), 0)
+}
+
+function resetCardCounts() {
+  Object.assign(setup.cardCounts, DEFAULT_CARD_COUNTS)
 }
 
 function saveState() {
@@ -702,6 +1047,16 @@ function startGame() {
   setupError.value = ''
   const names = setup.names.slice(0, setup.teamCount).map(name => name.trim())
   const targetVp = Number(setup.targetVp)
+  const cardCountsAreValid = cardConfigItems.every(item => {
+    if (setup.cardCounts[item.key] === '') return false
+    const count = Number(setup.cardCounts[item.key])
+    return Number.isInteger(count) && count >= 0 && count <= 99
+  })
+  const cardCounts = normalizeCardCounts(setup.cardCounts)
+  const audioSettings = {
+    bgmVolume: normalizeAudioVolume(state.bgmVolume),
+    sfxVolume: normalizeAudioVolume(state.sfxVolume),
+  }
   if (!Number.isInteger(targetVp) || targetVp < 10 || targetVp > 9999) {
     setupError.value = '勝利VPは10〜9999の整数で入力してください。'
     return
@@ -714,19 +1069,33 @@ function startGame() {
     setupError.value = 'チーム名はそれぞれ異なる名前にしてください。'
     return
   }
+  if (!cardCountsAreValid) {
+    setupError.value = 'カード枚数はすべて0〜99の整数で入力してください。'
+    return
+  }
+  const minimumDraftCards = (setup.teamCount + 1) * 3
+  if (cardCountTotal(cardCounts) < minimumDraftCards) {
+    setupError.value = `共有カードは最初のドラフトに必要な${minimumDraftCards}枚以上にしてください。`
+    return
+  }
 
   clearTransformationDisplay()
+  bgmBpm.value = BGM_BASE_BPM
   Object.assign(state, {
     ...emptyState(),
     phase: 'initial-spin',
     targetVp,
     customizeSeconds: setup.customizeSeconds,
+    ...audioSettings,
     teams: names.map(makeTeam),
-    cardPool: buildCardPool(),
+    cardCounts,
+    cardPool: buildCardPool(cardCounts),
     spinOrder: names.map((_, index) => index),
     spinContext: 'initial',
     log: ['ゲームを開始しました。全チームが初回スピンを行います。'],
   })
+  appendScoreHistory('開始')
+  showScoreChart.value = false
   state.teams.forEach(team => {
     team.spinRights = 1
     team.spinRightsRemaining = 1
@@ -742,6 +1111,7 @@ function resumeGame() {
   if (value) {
     clearTransformationDisplay()
     Object.assign(state, value)
+    bgmBpm.value = targetBgmBpm.value
   }
 }
 
@@ -753,7 +1123,8 @@ function recordQuestion(teamIndex) {
     state.teams[teamIndex].roundCorrect++
     addLog(`Q${state.questionInRound + 1}：${state.teams[teamIndex].name}が正解。`)
   } else {
-    addLog(`Q${state.questionInRound + 1}：正解チームなし。`)
+    state.roundPasses++
+    addLog(`Q${state.questionInRound + 1}：スルー。コイン1枚を没収ポットへ。`)
   }
   state.questionInRound++
   if (state.questionInRound >= QUESTIONS_PER_ROUND) prepareRoundSpins()
@@ -824,9 +1195,12 @@ async function spinOnce(index) {
   team.hitCells = result.hitCells
   team.vp += result.points
   team.spinRightsRemaining--
+  const spinNumber = team.spinRights - team.spinRightsRemaining
+  const scoreLabel = state.spinContext === 'initial' ? `初回 T${index + 1}` : `R${state.roundNumber} T${index + 1}-${spinNumber}`
+  appendScoreHistory(scoreLabel)
   team.lastResult = result.message
   addLog(`${team.name}がスピンし、${result.points}VPを獲得。`)
-  if (result.points > 0) playWinSfx(result.points, result.hitCount)
+  if (result.points > 0) playWinSfx(result.points, result.hitCount, result.sevenHitCount)
   else playMissSfx()
   rollingTeamIndex.value = null
   stoppedColumns.value = []
@@ -849,6 +1223,7 @@ function finishSpinPhase() {
   if (reached && state.spinContext === 'round') {
     state.phase = 'finished'
     addLog('規定VPに到達したチームが出たためゲーム終了。')
+    playWinnerFanfare()
     return
   }
   if (state.spinContext === 'initial') {
@@ -861,6 +1236,7 @@ function finishSpinPhase() {
 function beginQuizRound() {
   state.roundNumber++
   state.questionInRound = 0
+  state.roundPasses = 0
   state.activeTeamIndex = null
   state.spinContext = null
   state.teams.forEach(team => {
@@ -964,12 +1340,20 @@ function useCard(teamIndex, cardUid) {
     return
   }
 
-  if (card.key === 'remove') {
+  if (card.key === 'remove' || card.key === 'doubleRemove') {
     if (team.numberDeck.length <= 10) {
       dataError.value = '数字山札は10枚未満にできません。'
       return
     }
-    pendingUse.value = { mode: 'remove', teamIndex, cardUid, card }
+    const removeLimit = card.key === 'doubleRemove' ? 2 : 1
+    pendingUse.value = {
+      mode: 'remove',
+      teamIndex,
+      cardUid,
+      card,
+      remaining: Math.min(removeLimit, team.numberDeck.length - 10),
+      removed: 0,
+    }
     return
   }
 
@@ -995,11 +1379,18 @@ function applyRemove(numberUid) {
   if (!use || state.phase !== 'customize') return
   const team = state.teams[use.teamIndex]
   if (team.numberDeck.length <= 10) return
-  snapshot()
   const cardIndex = team.numberDeck.findIndex(card => card.uid === numberUid)
-  if (cardIndex >= 0) team.numberDeck.splice(cardIndex, 1)
+  if (cardIndex < 0) return
+  if (use.removed === 0) snapshot()
+  team.numberDeck.splice(cardIndex, 1)
+  use.removed++
+  use.remaining--
+  if (use.remaining > 0 && team.numberDeck.length > 10) {
+    team.lastResult = `${use.card.title}：${use.removed}枚目をリムーブ`
+    return
+  }
   consumeHandCard(team, use.cardUid)
-  team.lastResult = '数字カードを1枚リムーブ'
+  team.lastResult = `数字カードを${use.removed}枚リムーブ`
   pendingUse.value = null
 }
 
@@ -1088,7 +1479,7 @@ function calculateSpin(team, originalReels) {
 
   const lineResult = scoreReels(team, reels)
   const oneTwoCount = originalReels.filter(card => card?.key === 'wild12' || card?.value === 1 || card?.value === 2).length
-  const oneTwoBonus = oneTwoCount * (team.abilities.oneTwoBeat || 0)
+  const oneTwoBonus = Math.floor(oneTwoCount / 2) * (team.abilities.oneTwoBeat || 0)
   const points = lineResult.points + originalBonus + oneTwoBonus
 
   if (originalBonus) notes.push(`出現+${originalBonus}`)
@@ -1098,6 +1489,7 @@ function calculateSpin(team, originalReels) {
   return {
     points,
     hitCount: lineResult.hitCount,
+    sevenHitCount: lineResult.sevenHitCount,
     reels,
     hitCells: lineResult.hitCells,
     transformations,
@@ -1153,6 +1545,7 @@ function scoreReels(team, reels) {
   let points = 0
   let hitCount = 0
   const hitCells = []
+  const hitValues = []
   LINES.forEach((line, lineIndex) => {
     const multiplier = team.lineMultipliers[lineIndex]
     if (!multiplier) return
@@ -1161,10 +1554,16 @@ function scoreReels(team, reels) {
     if (value !== null) {
       points += value * multiplier
       hitCount++
+      hitValues.push(value)
       hitCells.push(...line)
     }
   })
-  return { points, hitCount, hitCells: [...new Set(hitCells)] }
+  return {
+    points,
+    hitCount,
+    sevenHitCount: hitValues.filter(value => value === 7).length,
+    hitCells: [...new Set(hitCells)],
+  }
 }
 
 function matchingValue(cards) {
@@ -1220,8 +1619,8 @@ function abilityBadges(team) {
       key: 'oneTwoBeat',
       icon: '1·2',
       label: 'ワンツー',
-      effect: `1枚ごと+${abilities.oneTwoBeat || 0}VP`,
-      title: '1・2・1/2が出るたび、レベルと同じVPを獲得',
+      effect: `2枚ごと+${abilities.oneTwoBeat || 0}VP`,
+      title: '1・2・1/2が2枚出るごとに、レベルと同じVPを獲得',
     },
     {
       key: 'luckyNumber',
@@ -1252,12 +1651,6 @@ function abilityBadges(team) {
 
 function enabledLineCount(team) {
   return team.lineMultipliers.filter(multiplier => multiplier > 0).length
-}
-
-function focusedTeamPosition(teamIndex) {
-  if (state.activeTeamIndex === null || teamIndex === state.activeTeamIndex) return 'center'
-  const sideTeams = state.teams.map((_, index) => index).filter(index => index !== state.activeTeamIndex)
-  return sideTeams.indexOf(teamIndex) === 0 ? 'left' : 'right'
 }
 
 function cardKindLabel(card) {
@@ -1302,7 +1695,12 @@ function ensureAudioContext() {
   return audioContext
 }
 
-function playTone(frequency, duration = 0.12, type = 'sine', volume = 0.025, delay = 0) {
+function scaledAudioVolume(volume, channel = 'sfx') {
+  const setting = channel === 'bgm' ? state.bgmVolume : state.sfxVolume
+  return Math.min(0.35, Math.max(0, volume * normalizeAudioVolume(setting) / 100))
+}
+
+function playTone(frequency, duration = 0.12, type = 'sine', volume = 0.025, delay = 0, channel = 'sfx') {
   const context = ensureAudioContext()
   if (!context) return
   if (context.state === 'suspended') context.resume().catch(() => {})
@@ -1312,12 +1710,17 @@ function playTone(frequency, duration = 0.12, type = 'sine', volume = 0.025, del
   oscillator.type = type
   oscillator.frequency.setValueAtTime(frequency, startAt)
   gain.gain.setValueAtTime(0.0001, startAt)
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), startAt + 0.012)
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, scaledAudioVolume(volume, channel)), startAt + 0.012)
   gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration)
   oscillator.connect(gain)
   gain.connect(context.destination)
   oscillator.start(startAt)
   oscillator.stop(startAt + duration + 0.02)
+}
+
+function previewAudio(channel) {
+  if (channel === 'sfx' && !sfxEnabled.value) return
+  playTone(channel === 'bgm' ? 659 : 880, 0.1, 'sine', 0.025, 0, channel)
 }
 
 async function toggleBgm() {
@@ -1332,27 +1735,35 @@ async function toggleBgm() {
     bgmPlaying.value = true
     bgmStep = 0
     playBgmStep()
-    bgmTimer = window.setInterval(playBgmStep, 230)
   } catch {
     dataError.value = 'BGMを開始できませんでした。もう一度BGMボタンを押してください。'
   }
 }
 
 function stopBgm() {
-  if (bgmTimer) window.clearInterval(bgmTimer)
+  if (bgmTimer) window.clearTimeout(bgmTimer)
   bgmTimer = null
   bgmPlaying.value = false
 }
 
 function playBgmStep() {
   if (!bgmPlaying.value) return
+  bgmTimer = null
+  const bpmDifference = targetBgmBpm.value - bgmBpm.value
+  if (Math.abs(bpmDifference) > 0.01) {
+    bgmBpm.value += Math.sign(bpmDifference) * Math.min(Math.abs(bpmDifference), 0.45)
+  } else {
+    bgmBpm.value = targetBgmBpm.value
+  }
   const melody = [659, 784, 880, 784, 659, 784, 988, 880, 698, 831, 988, 831, 698, 831, 1047, 988]
   const bass = [131, 131, 165, 165, 175, 175, 196, 196]
   const note = melody[bgmStep % melody.length]
-  playTone(note, 0.18, 'square', 0.016)
-  if (bgmStep % 2 === 0) playTone(bass[Math.floor(bgmStep / 2) % bass.length], 0.32, 'triangle', 0.022)
-  if (bgmStep % 4 === 3) playTone(note * 2, 0.05, 'sine', 0.009)
+  playTone(note, 0.18, 'square', 0.016, 0, 'bgm')
+  if (bgmStep % 2 === 0) playTone(bass[Math.floor(bgmStep / 2) % bass.length], 0.32, 'triangle', 0.022, 0, 'bgm')
+  if (bgmStep % 4 === 3) playTone(note * 2, 0.05, 'sine', 0.009, 0, 'bgm')
   bgmStep++
+  const stepMilliseconds = 60000 / (bgmBpm.value * 2)
+  bgmTimer = window.setTimeout(playBgmStep, stepMilliseconds)
 }
 
 function toggleSfx() {
@@ -1376,7 +1787,7 @@ function playSpinStartSfx() {
   oscillator.frequency.setValueAtTime(110, now)
   oscillator.frequency.exponentialRampToValueAtTime(420, now + 0.32)
   gain.gain.setValueAtTime(0.0001, now)
-  gain.gain.exponentialRampToValueAtTime(0.035, now + 0.03)
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, scaledAudioVolume(0.035, 'sfx')), now + 0.03)
   gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34)
   oscillator.connect(gain)
   gain.connect(context.destination)
@@ -1421,13 +1832,37 @@ function playMissSfx() {
   playTone(220, 0.22, 'triangle', 0.024, 0.12)
 }
 
-function playWinSfx(points, hitCount) {
+function playWinSfx(points, hitCount, sevenHitCount = 0) {
   if (!sfxEnabled.value) return
   const notes = hitCount >= 2 || points >= 10
     ? [523, 659, 784, 1047, 1319]
     : [523, 659, 784, 1047]
   notes.forEach((note, index) => playTone(note, index === notes.length - 1 ? 0.36 : 0.14, 'square', 0.035, index * 0.09))
   if (hitCount > 0) playTone(262, 0.5, 'triangle', 0.028, 0.02)
+  if (sevenHitCount > 0) playSevenJackpotSfx(sevenHitCount)
+}
+
+function playSevenJackpotSfx(sevenHitCount) {
+  if (!sfxEnabled.value) return
+  const sparkle = [784, 988, 1175, 1568, 1976, 2350]
+  sparkle.forEach((note, index) => playTone(note, index === sparkle.length - 1 ? 0.55 : 0.18, index % 2 ? 'sine' : 'square', 0.032, 0.16 + index * 0.075))
+  playTone(196, 0.75, 'sawtooth', 0.035, 0.1)
+  playTone(392, 0.55, 'triangle', 0.032, 0.28)
+  if (sevenHitCount >= 2) {
+    ;[1047, 1319, 1568].forEach(note => playTone(note, 0.7, 'square', 0.028, 0.68))
+  }
+}
+
+function playWinnerFanfare() {
+  if (!sfxEnabled.value || normalizeAudioVolume(state.sfxVolume) === 0) return
+  if (bgmPlaying.value) stopBgm()
+  const melody = [523, 659, 784, 1047, 784, 1047, 1319]
+  const delays = [0, 0.16, 0.32, 0.54, 0.78, 0.98, 1.22]
+  melody.forEach((note, index) => playTone(note, index === melody.length - 1 ? 0.95 : 0.22, index % 2 ? 'triangle' : 'square', 0.04, delays[index]))
+  playTone(131, 1.65, 'sawtooth', 0.035, 0)
+  playTone(196, 1.3, 'triangle', 0.032, 0.32)
+  ;[1047, 1319, 1568].forEach(note => playTone(note, 1.05, 'square', 0.032, 1.22))
+  ;[2093, 2637, 3136].forEach((note, index) => playTone(note, 0.38, 'sine', 0.025, 1.38 + index * 0.08))
 }
 
 function wait(milliseconds) {
@@ -1439,18 +1874,32 @@ function addLog(message) {
   state.log = state.log.slice(0, 100)
 }
 
+function appendScoreHistory(label) {
+  state.scoreHistory.push({
+    id: `score-${nextUid()}`,
+    label,
+    scores: state.teams.map(team => Math.max(0, Number(team.vp) || 0)),
+  })
+}
+
 function confirmReset() {
   if (!window.confirm('現在のゲームを終了して、新しい対戦設定へ戻りますか？')) return
+  const audioSettings = {
+    bgmVolume: normalizeAudioVolume(state.bgmVolume),
+    sfxVolume: normalizeAudioVolume(state.sfxVolume),
+  }
   clearTransformationDisplay()
+  bgmBpm.value = BGM_BASE_BPM
   localStorage.removeItem(STORAGE_KEY)
   history.splice(0)
   pendingUse.value = null
-  Object.assign(state, emptyState())
+  showScoreChart.value = false
+  Object.assign(state, emptyState(), audioSettings)
   hasSave.value = false
 }
 
 function downloadBackup() {
-  const blob = new Blob([JSON.stringify({ app: 'custom-slot-millionaire', version: 3, state }, null, 2)], { type: 'application/json' })
+  const blob = new Blob([JSON.stringify({ app: 'custom-slot-millionaire', version: 7, state }, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -1475,8 +1924,22 @@ async function restoreBackup(event) {
   }
 }
 
+onMounted(() => {
+  if (state.phase !== 'setup') bgmBpm.value = targetBgmBpm.value
+  window.addEventListener('keydown', handleSpinShortcut)
+  window.addEventListener('custom-slot-spin', triggerSpinAction)
+  window.addEventListener('gamepadconnected', startGamepadPolling)
+  if ([...(navigator.getGamepads?.() || [])].some(Boolean)) startGamepadPolling()
+})
+
 onUnmounted(() => {
   spinRunId++
+  window.removeEventListener('keydown', handleSpinShortcut)
+  window.removeEventListener('custom-slot-spin', triggerSpinAction)
+  window.removeEventListener('gamepadconnected', startGamepadPolling)
+  if (gamepadAnimationFrame !== null) window.cancelAnimationFrame(gamepadAnimationFrame)
+  gamepadAnimationFrame = null
+  gamepadButtonStates.clear()
   stopCustomizeTimer()
   stopReelSound()
   stopBgm()
@@ -1489,8 +1952,14 @@ onUnmounted(() => {
 .slot-header { max-width: 1320px; margin: 0 auto 8px; display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 10px; text-align: center; }
 .slot-header h1 { margin: 0; font-size: clamp(1.25rem, 3vw, 1.75rem); color: #ffd54f; line-height: 1.15; }
 .slot-header button { min-height: 38px; padding: 7px 10px; }
-.header-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.header-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 6px; }
+.audio-control { display: flex; align-items: center; gap: 5px; padding-right: 5px; border: 1px solid #55483e; border-radius: 9px; background: #18130f; }
+.audio-control label { display: flex; align-items: center; gap: 4px; }
+.audio-control input[type="range"] { width: 76px; accent-color: #ffd54f; cursor: pointer; }
+.audio-control output { min-width: 39px; color: #ffe082; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .68rem; font-weight: 900; text-align: right; }
 .bgm-button, .sfx-button { min-width: 92px; background: #2b2119; font-weight: 800; }
+.bgm-button span, .bgm-button small { display: block; }
+.bgm-button small { margin-top: 1px; color: #ffe082; font-size: .58rem; letter-spacing: .06em; }
 .bgm-button.playing, .sfx-button.playing { border-color: #ffd54f; background: #5d3a00; color: #fff3b0; box-shadow: 0 0 12px rgba(255,193,7,.22); }
 .eyebrow, .quiz-kicker { margin: 0; color: #e0d0c5; font-size: .7rem; font-weight: 800; letter-spacing: .16em; }
 .panel { max-width: 960px; margin: 14px auto; padding: 20px; border: 2px solid rgba(255,193,7,.35); border-radius: 16px; background: rgba(20,16,10,.94); }
@@ -1499,6 +1968,10 @@ onUnmounted(() => {
 .next-action span { display: block; color: #ffe0a3; font-size: .68rem; font-weight: 900; letter-spacing: .14em; }
 .next-action strong { display: block; margin-top: 2px; color: #fff; font-size: clamp(1rem, 2vw, 1.25rem); line-height: 1.25; }
 .guide { line-height: 1.8; }
+.card-count-help { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; padding: 12px; border: 1px solid #665128; border-radius: 10px; background: #1c1710; }
+.card-count-help > strong { width: 100%; color: #ffd54f; }
+.card-count-help span { padding: 4px 8px; border-radius: 99px; background: #33281e; color: #e8ddd5; font-size: .78rem; }
+.card-count-help b { color: #fff; }
 .setup { max-width: 560px; display: grid; gap: 14px; }
 .setup h2, .quiz-console h2, .draft h2, .customize h2 { margin: 0; color: #ffd54f; }
 .choice-row, .setup-actions, .data-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1516,6 +1989,15 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .team-inputs { display: grid; gap: 10px; }
 .team-inputs label { display: grid; gap: 5px; color: #bcaaa4; }
 .team-inputs input { padding: 11px; border: 1px solid #5d4037; border-radius: 8px; background: #1d1712; color: #fff; font-size: 1rem; }
+.card-config { padding: 12px; border: 1px solid #5d4037; border-radius: 10px; background: #18130f; }
+.card-config summary { display: flex; justify-content: space-between; gap: 12px; color: #ffd54f; cursor: pointer; font-weight: 900; }
+.card-config > p { color: #bcaaa4; font-size: .8rem; }
+.card-config__group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 12px 0; }
+.card-config__group h3 { grid-column: 1 / -1; margin: 0; color: #e6d7cf; font-size: .82rem; }
+.card-config__group label { min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 8px; background: #29211b; color: #f0e6df; font-size: .78rem; }
+.card-count-input { display: inline-flex; align-items: center; gap: 4px; }
+.card-count-input input { width: 56px; padding: 7px 5px; border: 1px solid #806a5d; border-radius: 6px; background: #100d0b; color: #fff; font-weight: 900; text-align: right; }
+.card-count-input b { color: #cdbdb3; font-size: .7rem; }
 .status { max-width: none; margin: 0; padding: 9px 12px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; }
 .status div { min-width: 76px; display: grid; padding: 4px 8px; border-radius: 8px; background: #2b211b; text-align: center; }
 .status span { color: #d7c5b9; font-size: .67rem; font-weight: 700; }
@@ -1533,33 +2015,45 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .credit-coin-enter-active { animation: credit-in .32s cubic-bezier(.2,1.35,.35,1); }
 .credit-coin-leave-active { transition: transform .24s ease, opacity .24s ease; }
 .credit-coin-leave-to { opacity: 0; transform: translateY(-15px) rotate(80deg) scale(.35); }
+.pass-vault { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; padding: 8px 10px; border: 2px solid #70453d; border-radius: 11px; background: linear-gradient(135deg, #2a1714, #120d0c); }
+.pass-vault__heading { display: grid; gap: 1px; min-width: 150px; }
+.pass-vault__heading span { color: #ef9a9a; font-size: .68rem; font-weight: 900; letter-spacing: .07em; }
+.pass-vault__heading strong { color: #ffccbc; font-size: 1rem; }
+.confiscated-coins { min-height: 26px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.confiscated-coins small { color: #755e59; font-size: .68rem; font-weight: 900; }
+.confiscated-coin { width: 24px; height: 24px; display: grid; flex: 0 0 24px; place-items: center; border: 2px solid #9e7770; border-radius: 50%; background: radial-gradient(circle at 35% 28%, #e3cdc8 0 8%, #8b6660 38%, #3d2926 78%); color: #291715; font-size: .75rem; font-weight: 1000; box-shadow: inset 0 0 0 2px rgba(30,10,8,.3), 0 2px 4px rgba(0,0,0,.5); }
+.confiscated-coin-enter-active { animation: confiscated-in .48s cubic-bezier(.22,1.2,.35,1); }
 .quiz-console { text-align: center; }
 .quiz-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0; }
 .quiz-buttons button { min-height: 58px; font-size: 1rem; }
 .quiz-buttons button:not(.secondary) { background: color-mix(in srgb, var(--team) 72%, #181818); border: 2px solid var(--team); font-weight: 900; }
+.quiz-buttons .pass-button { grid-column: 1 / -1; background: linear-gradient(135deg, #522823, #2a1714); border: 2px solid #a66155; color: #ffccbc; font-weight: 900; }
 .round-corrects, .draft-order { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .round-corrects span, .draft-order span { padding: 8px 13px; border-radius: 99px; background: rgba(255,255,255,.1); color: #f1e4dc; font-size: .88rem; }
+.round-corrects .pass-summary { background: #452621; color: #ffccbc; }
 .draft-order span.current { color: #ffd54f; border: 1px solid #ffb300; }
 .action-panel { max-width: 1100px; border-color: #ffb300; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
-.teams { max-width: 1180px; margin: 10px auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.teams { max-width: 1320px; margin: 10px auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
 .team-card { --team: #ffb300; padding: 18px; border: 3px solid color-mix(in srgb, var(--team) 48%, transparent); border-radius: 18px; background: rgba(8,7,6,.92); box-shadow: inset 0 0 30px color-mix(in srgb, var(--team) 8%, transparent); }
 .team-card.active { border-color: var(--team); box-shadow: 0 0 28px color-mix(in srgb, var(--team) 45%, transparent); }
-.teams--focus { max-width: 1320px; grid-template-columns: minmax(190px, 1fr) minmax(500px, 640px) minmax(190px, 1fr); align-items: start; }
-.teams--focus .team-card.active { grid-column: 2; grid-row: 1; width: 100%; padding: 14px; justify-self: center; }
-.teams--focus .team-card--left { grid-column: 1; grid-row: 1; }
-.teams--focus .team-card--right { grid-column: 3; grid-row: 1; }
-.teams--focus .team-card:not(.active) { padding: 10px; opacity: .78; border-width: 2px; }
-.teams--focus .team-card:not(.active) .team-heading h2 { font-size: 1.05rem; }
-.teams--focus .team-card:not(.active) .score strong { font-size: 1.8rem; }
-.teams--focus .team-card:not(.active) .resources small { font-size: .6rem; }
-.teams--focus .team-card:not(.active) .resources strong { font-size: .82rem; }
-.teams--focus .team-card:not(.active) .reels span { aspect-ratio: 1.45; border-width: 2px; border-radius: 7px; font-size: 1.35rem; }
-.teams--focus .team-card:not(.active) .line-heading span,
-.teams--focus .team-card:not(.active) .line-status,
-.teams--focus .team-card:not(.active) .deck-status,
-.teams--focus .team-card:not(.active) .ability-status,
-.teams--focus .team-card:not(.active) .result { display: none; }
-.teams--focus .team-card:not(.active) .line-heading { margin-bottom: 0; }
+.teams--focus { grid-template-columns: minmax(175px, 1fr) minmax(500px, 640px) minmax(175px, 1fr); align-items: start; }
+.teams--focus > .team-card.active { grid-column: 2; grid-row: 1; width: 100%; padding: 14px; justify-self: center; }
+.teams--focus > .team-card:not(.active) { display: none; }
+.focus-side { display: grid; align-content: start; gap: 10px; }
+.focus-side--left { grid-column: 1; grid-row: 1; }
+.focus-side--right { grid-column: 3; grid-row: 1; }
+.focus-team { padding: 9px; border: 2px solid color-mix(in srgb, var(--team) 42%, #4a4039); border-radius: 12px; background: rgba(12,10,8,.92); opacity: .78; }
+.focus-team.active { border-color: var(--team); background: color-mix(in srgb, var(--team) 10%, #0c0a08); opacity: 1; box-shadow: 0 0 13px color-mix(in srgb, var(--team) 28%, transparent); }
+.focus-team__heading, .focus-team__footer { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.focus-team__heading span { color: var(--team); font-size: .63rem; font-weight: 900; letter-spacing: .06em; }
+.focus-team__heading strong { color: #fff; font-size: .82rem; }
+.focus-team h3 { margin: 2px 0 6px; overflow: hidden; font-size: .95rem; text-overflow: ellipsis; white-space: nowrap; }
+.focus-mini-reels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.focus-mini-reels span { aspect-ratio: 1.45; display: grid; place-items: center; border: 2px solid #5d4037; border-radius: 5px; background: #f6f0e9; color: #271810; font-size: .88rem; font-weight: 1000; }
+.focus-mini-reels span.hit { border-color: #ffb300; color: #d84315; box-shadow: 0 0 5px #ffb300; }
+.focus-mini-reels span.bonus { border-color: #00acc1; background: #bcecf1; color: #005662; }
+.focus-mini-reels span.bonus--two { border-color: #8e5be8; background: #dfc7fa; color: #4a148c; }
+.focus-team__footer { margin-top: 6px; color: #cdbdb3; font-size: .62rem; font-weight: 900; }
 .team-card.winner { animation: winner 1s infinite alternate; }
 .team-heading { display: flex; justify-content: space-between; align-items: center; }
 .team-number { color: var(--team); font-size: .78rem; font-weight: 900; letter-spacing: .08em; }
@@ -1643,16 +2137,19 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .result { min-height: 2em; margin: 7px 0; color: #ffe082; text-align: center; font-size: .94rem; font-weight: 700; }
 .result--confirmed { padding: 9px 7px; border: 2px solid #ffb300; border-radius: 9px; background: rgba(255,179,0,.15); font-size: 1.05rem; font-weight: 900; }
 .spin-button, .continue-button { width: 100%; min-height: 48px; background: linear-gradient(135deg, #ef6c00, #d84315); border: 2px solid #ffca28; font-size: 1rem; font-weight: 900; }
+.spin-button small, .continue-button small { display: block; margin-top: 3px; color: #fff3d0; font-size: .67rem; letter-spacing: .05em; }
 .rolling-cell { color: #f4511e !important; filter: blur(1px); animation: reel-roll .14s linear infinite; }
 .rolling-message { min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #ffd54f; font-size: .78rem; font-weight: 900; letter-spacing: .18em; }
 .rolling-lamp { width: 9px; height: 9px; border-radius: 50%; background: #ffb300; box-shadow: 0 0 12px #ffb300; animation: lamp .45s ease-in-out infinite alternate; }
 .card-sets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px; }
 .card-set { display: grid; gap: 9px; padding: 13px; border: 2px solid #5d514a; text-align: left; }
 .set-label { color: #ffd54f; font-size: .82rem; font-weight: 900; letter-spacing: .15em; }
-.mini-card, .hand-card { display: grid; gap: 5px; padding: 11px; border-left: 6px solid #795548; border-radius: 8px; background: #2b2420; }
-.mini-card strong, .hand-card strong { color: #fff; font-size: 1rem; }
-.mini-card small, .hand-card small { color: #e2d5cd; font-size: .78rem; line-height: 1.45; }
-.card-kind { width: fit-content; padding: 2px 7px; border-radius: 99px; background: rgba(255,255,255,.12); color: #fff; font-size: .66rem; font-weight: 900; letter-spacing: .05em; }
+.mini-card, .hand-card { position: relative; display: grid; gap: 7px; min-height: 78px; padding: 13px; border-left: 6px solid #795548; border-radius: 8px; background: #2b2420; }
+.mini-card strong, .hand-card strong { color: #fff; font-size: 1.18rem; line-height: 1.25; }
+.card-description { display: none; color: #f2e7df; font-size: .9rem; line-height: 1.5; }
+.card-kind { width: fit-content; padding: 3px 8px; border-radius: 99px; background: rgba(255,255,255,.14); color: #fff; font-size: .74rem; font-weight: 900; letter-spacing: .05em; }
+.mini-card::after, .hand-card::after { content: attr(data-tooltip); position: absolute; inset: 4px; z-index: 5; display: grid; place-items: center; padding: 10px; border: 2px solid #ffd54f; border-radius: 7px; background: rgba(18,13,9,.98); color: #fff7df; font-size: .95rem; font-weight: 800; line-height: 1.45; text-align: center; opacity: 0; transform: scale(.96); pointer-events: none; transition: opacity .16s ease, transform .16s ease; }
+.mini-card:hover::after, .card-set:focus-visible .mini-card::after, .hand-card:hover::after, .hand-card:focus-visible::after { opacity: 1; transform: scale(1); }
 .card--number { border-left-color: #42a5f5; }
 .card--upgrade { border-left-color: #ab47bc; }
 .card--multiplier { border-left-color: #ffa726; }
@@ -1671,10 +2168,28 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .line-upgrade-grid, .remove-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0; }
 .line-upgrade-grid button { display: grid; gap: 3px; }
 .line-upgrade-grid strong { color: #ffd54f; font-size: .7rem; }
+.score-chart-button { color: #d9f6ff; border-color: #4f8394; background: #17333c; font-weight: 800; }
+.score-chart-modal { position: fixed; left: 50%; top: 50%; z-index: 40; width: min(1120px, calc(100% - 24px)); max-width: none; max-height: calc(100vh - 24px); margin: 0; overflow-y: auto; transform: translate(-50%, -50%); border-color: #4f8394; box-shadow: 0 12px 60px rgba(0,0,0,.85); }
+.score-chart-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.score-chart-heading h2 { margin: 2px 0; color: #d9f6ff; }
+.score-chart-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.score-chart-legend span { display: flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--team) 65%, #fff); border-radius: 99px; background: color-mix(in srgb, var(--team) 14%, #16110e); font-size: .78rem; }
+.score-chart-legend i { width: 10px; height: 10px; border-radius: 50%; background: var(--team); box-shadow: 0 0 7px var(--team); }
+.score-chart-legend strong { color: var(--team); }
+.score-chart-scroll { overflow-x: auto; padding: 8px; border: 1px solid #4f4037; border-radius: 10px; background: #0d1113; }
+.score-chart { min-width: 760px; height: auto; display: block; overflow: visible; }
+.score-grid line { stroke: #405057; stroke-width: 1; stroke-dasharray: 5 5; }
+.score-grid text { fill: #b8c9cf; font-size: 11px; text-anchor: end; }
+.score-axis-labels line { stroke: #74858b; stroke-width: 1; }
+.score-axis-labels text { fill: #c9d6da; font-size: 10px; }
+.score-team-line polyline { fill: none; stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255,255,255,.2)); }
+.score-team-line circle { stroke: #101315; stroke-width: 2; }
+.score-chart-note { margin: 9px 0 0; color: #b8c9cf; font-size: .76rem; }
 .winner-banner { position: fixed; inset: 0; z-index: 30; display: grid; place-content: center; justify-items: center; gap: 12px; background: rgba(10,6,2,.92); }
 .winner-banner span { color: #ffd54f; letter-spacing: .3em; }
 .winner-banner strong { font-size: clamp(2rem, 10vw, 5rem); }
 .winner-banner p { font-size: 1.5rem; }
+.winner-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .log summary { cursor: pointer; color: #ffd54f; }
 .log ol { max-height: 220px; overflow: auto; color: #bcaaa4; font-size: .8rem; }
 .file-button input { display: none; }
@@ -1684,17 +2199,23 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 @keyframes lamp { to { opacity: .25; transform: scale(.7); } }
 @keyframes ability-transform { from { transform: scale(1); filter: brightness(1); } to { transform: scale(1.08) rotate(-1deg); filter: brightness(1.25); box-shadow: 0 0 22px var(--transform-color, #fff); } }
 @keyframes credit-in { from { opacity: 0; transform: translateY(-12px) rotate(-120deg) scale(.25); } to { opacity: 1; transform: none; } }
+@keyframes confiscated-in { from { opacity: 0; transform: translateY(-34px) rotate(-180deg) scale(.3); } 65% { transform: translateY(3px) rotate(14deg) scale(1.12); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .rolling-cell, .rolling-lamp, .team-card.winner, .transforming-cell, .credit-coin-enter-active { animation: none; }
+  .rolling-cell, .rolling-lamp, .team-card.winner, .transforming-cell, .credit-coin-enter-active, .confiscated-coin-enter-active { animation: none; }
   .reel-slip-strip { transition: none; }
   .credit-coin-leave-active { transition: none; }
+  .mini-card::after, .hand-card::after { transition: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .card-description { display: block; }
+  .mini-card::after, .hand-card::after { display: none; }
 }
 @media (max-width: 980px) {
   .game-toolbar { grid-template-columns: 1fr; }
   .next-action { text-align: center; }
   .teams--focus { max-width: 640px; grid-template-columns: 1fr; }
-  .teams--focus .team-card.active { grid-column: 1; grid-row: 1; }
-  .teams--focus .team-card:not(.active) { display: none; }
+  .teams--focus > .team-card.active { grid-column: 1; grid-row: 1; }
+  .focus-side { display: none; }
   .teams--focus .team-card.active .line-status { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
@@ -1705,11 +2226,14 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
   .teams, .card-sets { grid-template-columns: 1fr; }
   .status { gap: 10px; }
   .quiz-buttons { grid-template-columns: 1fr 1fr; }
-  .credit-bank { padding: 6px; gap: 5px; }
+  .credit-bank { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 6px; gap: 5px; }
   .credit-team { padding: 6px; }
   .credit-team__heading { display: grid; gap: 2px; }
   .credit-team__heading strong { font-size: .68rem; }
   .credit-coin { width: 18px; height: 18px; flex-basis: 18px; border-width: 1px; font-size: .52rem; }
+  .pass-vault { grid-template-columns: 1fr; gap: 5px; }
+  .pass-vault__heading { min-width: 0; display: flex; justify-content: space-between; }
+  .card-config__group { grid-template-columns: 1fr; }
   .team-card { padding: 13px; }
   .reels span { aspect-ratio: 1.6; }
   .line-status, .line-upgrade-grid { grid-template-columns: repeat(2, 1fr); }
