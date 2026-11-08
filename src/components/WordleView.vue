@@ -20,7 +20,8 @@
         <li>クイズに正解したチームは、相手チームを1つ選んで5文字を1回予想できます。</li>
         <li><b class="legend-exact">赤</b>は文字も場所も一致、<b class="legend-present">黄</b>は文字だけ一致、灰色は使われていない文字です。</li>
         <li>濁音・半濁音・小さい文字・長音は、それぞれ別の1文字として判定します。</li>
-        <li>秘密ワードと予想には、同じ文字を2回使えません。</li>
+        <li>秘密ワード内では同じ文字を2回使えません。予想する言葉では同じ文字を使えます。</li>
+        <li>チーム同士の秘密ワードは同じでも構いません。</li>
         <li>秘密ワードを当てられたチームは撃破。最後まで秘密ワードが残ったチームが勝利です。</li>
         <li>秘密ワードの登録と文字入力は操作用画面だけで行い、会場表示へ未正解の秘密ワードは送りません。</li>
         <li>シンキングタイマーは30秒です。スタートボタンを押すまで減らず、0秒でも進行は自動で変わりません。</li>
@@ -85,7 +86,7 @@
         </article>
       </div>
 
-      <p class="wordle-note">全角・半角は入力時に統一します。「か」と「が」、「は」と「ぱ」は別の文字です。</p>
+      <p class="wordle-note">秘密ワード内の文字重複は不可ですが、別チームと同じ秘密ワードでも構いません。「か」と「が」、「は」と「ぱ」は別の文字です。</p>
       <p class="wordle-secret-note">🔒 この登録内容は操作用画面だけに保存され、会場表示用データには含まれません。</p>
       <p v-if="setupError" class="wordle-error">{{ setupError }}</p>
       <button class="wordle-button wordle-button--primary wordle-start" @click="startGame">ゲーム開始</button>
@@ -131,6 +132,8 @@
               <strong v-else-if="state.phase === 'finished'" class="team-status team-status--winner">WINNER</strong>
               <strong v-else class="team-status">防衛中</strong>
               <button class="history-button" type="button" @click="openHistory(teamIndex)">全履歴 {{ team.guesses.length }}件</button>
+              <button class="history-button" type="button" @click="openKana(teamIndex)">未使用の五十音</button>
+              <button v-if="state.phase === 'finished' && !team.solvedBy && !team.answerRevealed" class="history-button reveal-button" type="button" @click="revealAnswer(teamIndex)">答えを公開</button>
             </div>
           </header>
 
@@ -138,7 +141,7 @@
             <span
               v-for="(character, index) in displayAnswer(team)"
               :key="index"
-              :class="{ revealed: Boolean(team.solvedBy) || state.phase === 'finished' }"
+              :class="{ revealed: Boolean(team.solvedBy) || team.answerRevealed }"
             >{{ character }}</span>
           </div>
 
@@ -208,7 +211,7 @@
         <form v-else class="challenge-step challenge-input" @submit.prevent="submitGuess">
           <p class="wordle-kicker">WORD CHALLENGE</p>
           <h2>{{ challengerTeam.name }} → {{ targetTeam.name }}</h2>
-          <label for="wordle-guess">同じ文字を使わない5文字を入力</label>
+          <label for="wordle-guess">5文字を入力（同じ文字を使ってもOK）</label>
           <div class="challenge-input__row">
             <input
               id="wordle-guess"
@@ -230,8 +233,10 @@
       <section v-if="state.phase === 'finished' && winner && state.showWinnerOverlay" class="wordle-winner" aria-live="assertive">
         <span>WORD SURVIVOR</span>
         <strong>{{ winner.name }}</strong>
-        <p>秘密ワード「{{ winner.secret }}」を守り切りました</p>
+        <p v-if="winner.answerRevealed">秘密ワード「{{ winner.secret }}」を守り切りました</p>
+        <p v-else>秘密ワードはまだ非公開です</p>
         <div class="winner-actions">
+          <button v-if="!winner.answerRevealed" class="wordle-button wordle-button--primary" @click="revealAnswer(state.teams.indexOf(winner))">答えを公開</button>
           <button class="wordle-button wordle-button--secondary" @click="state.showWinnerOverlay = false">盤面と履歴を見る</button>
           <button class="wordle-button wordle-button--primary" @click="confirmNewGame">新しいゲーム</button>
         </div>
@@ -247,7 +252,7 @@
             <button class="wordle-button wordle-button--ghost" type="button" @click="closeHistory">✕ 閉じる</button>
           </header>
           <p v-if="historyTeam.guesses.length === 0" class="history-empty">まだ予想履歴はありません。</p>
-          <div v-else class="history-overlay__list">
+          <div v-else class="history-overlay__list" :style="historyGridStyle(historyTeam)">
             <div v-for="(guess, guessIndex) in historyTeam.guesses" :key="guess.id" class="history-overlay__entry">
               <strong>#{{ guessIndex + 1 }}</strong>
               <small>{{ challengerName(guess.challengerId) }}</small>
@@ -259,6 +264,28 @@
                 >{{ character }}</span>
               </div>
             </div>
+          </div>
+        </article>
+      </section>
+
+      <section v-if="kanaTeam" class="kana-overlay" role="dialog" aria-modal="true" :aria-label="`${kanaTeam.name}の未使用五十音`" @click.self="closeKana">
+        <article class="kana-overlay__panel" :style="{ '--team': kanaTeam.color }">
+          <header>
+            <div>
+              <span>UNUSED KANA</span>
+              <h2>{{ kanaTeam.name }}がまだ使っていない文字</h2>
+            </div>
+            <button class="wordle-button wordle-button--ghost" type="button" @click="closeKana">✕ 閉じる</button>
+          </header>
+          <p>このチームへの予想履歴に、まだ一度も登場していない文字です。</p>
+          <div class="kana-groups">
+            <section v-for="group in unusedKanaGroups" :key="group.label" class="kana-group">
+              <h3>{{ group.label }} <small>{{ group.characters.length }}字</small></h3>
+              <div class="kana-characters">
+                <span v-for="character in group.characters" :key="character">{{ character }}</span>
+                <em v-if="group.characters.length === 0">すべて使用済み</em>
+              </div>
+            </section>
           </div>
         </article>
       </section>
@@ -284,9 +311,11 @@ import {
   WORDLE_LENGTH,
   createWordlePublicState,
   evaluateWordleGuess,
+  getUnusedWordleKana,
   isWordleSolved,
   normalizeWordleWord,
   splitWordleWord,
+  validateWordleGuess,
   validateWordleWord,
 } from '../utils/wordle.js'
 
@@ -323,6 +352,8 @@ const targetCandidates = computed(() => state.teams
   .filter(entry => entry.index !== state.challengerIndex && !entry.team.solvedBy))
 const winner = computed(() => state.phase === 'finished' ? state.teams.find(team => !team.solvedBy) || null : null)
 const historyTeam = computed(() => state.teams[state.displayHistoryTeamIndex] || null)
+const kanaTeam = computed(() => state.teams[state.displayKanaTeamIndex] || null)
+const unusedKanaGroups = computed(() => getUnusedWordleKana(kanaTeam.value?.guesses || []))
 const formattedThinkingTime = computed(() => `00:${String(state.thinkingSeconds).padStart(2, '0')}`)
 const phaseInstruction = computed(() => {
   if (state.phase === 'finished') return `${winner.value?.name || '勝者'}の勝利`
@@ -336,9 +367,15 @@ watch(state, saveState, { deep: true, immediate: true })
 onMounted(() => {
   if (displayChannel) {
     displayChannel.onmessage = event => {
-      if (event.data?.type !== 'history-request') return
       const teamIndex = event.data.teamIndex
-      state.displayHistoryTeamIndex = Number.isInteger(teamIndex) && state.teams[teamIndex] ? teamIndex : null
+      const validIndex = Number.isInteger(teamIndex) && state.teams[teamIndex] ? teamIndex : null
+      if (event.data?.type === 'history-request') {
+        state.displayHistoryTeamIndex = validIndex
+        state.displayKanaTeamIndex = null
+      } else if (event.data?.type === 'kana-request') {
+        state.displayKanaTeamIndex = validIndex
+        state.displayHistoryTeamIndex = null
+      }
     }
   }
 })
@@ -356,6 +393,7 @@ function emptyState() {
     challengerIndex: null,
     targetIndex: null,
     displayHistoryTeamIndex: null,
+    displayKanaTeamIndex: null,
     thinkingSeconds: 30,
     thinkingRunning: false,
     showWinnerOverlay: true,
@@ -370,6 +408,7 @@ function makeTeam(team, index) {
     secret: normalizeWordleWord(team.secret),
     guesses: [],
     solvedBy: null,
+    answerRevealed: false,
   }
 }
 
@@ -388,10 +427,12 @@ function migrateState(value) {
       result: Array.isArray(guess.result) ? guess.result.slice(0, WORDLE_LENGTH) : [],
     })) : [],
     solvedBy: team.solvedBy || null,
+    answerRevealed: Boolean(team.answerRevealed),
   })) : []
   value.challengerIndex = Number.isInteger(value.challengerIndex) ? value.challengerIndex : null
   value.targetIndex = Number.isInteger(value.targetIndex) ? value.targetIndex : null
   value.displayHistoryTeamIndex = Number.isInteger(value.displayHistoryTeamIndex) ? value.displayHistoryTeamIndex : null
+  value.displayKanaTeamIndex = Number.isInteger(value.displayKanaTeamIndex) ? value.displayKanaTeamIndex : null
   value.thinkingSeconds = Number.isInteger(value.thinkingSeconds) ? Math.max(0, Math.min(30, value.thinkingSeconds)) : 30
   value.thinkingRunning = false
   value.showWinnerOverlay = value.showWinnerOverlay !== false
@@ -465,10 +506,6 @@ function startGame() {
     setupError.value = `${names[invalidIndex]}：${validations[invalidIndex].error}`
     return
   }
-  if (new Set(validations.map(result => result.word)).size !== validations.length) {
-    setupError.value = '秘密ワードはチームごとに異なる言葉を設定してください。'
-    return
-  }
   Object.assign(state, {
     schemaVersion: 1,
     phase: 'play',
@@ -476,6 +513,7 @@ function startGame() {
     challengerIndex: null,
     targetIndex: null,
     displayHistoryTeamIndex: null,
+    displayKanaTeamIndex: null,
     thinkingSeconds: 30,
     thinkingRunning: false,
     showWinnerOverlay: true,
@@ -529,7 +567,7 @@ async function focusGuessInput() {
 
 function submitGuess() {
   if (!challengerTeam.value || !targetTeam.value) return
-  const validation = validateWordleWord(guessInput.value)
+  const validation = validateWordleGuess(guessInput.value)
   if (!validation.valid) {
     guessError.value = validation.error
     return
@@ -583,10 +621,36 @@ function resetThinkingTimer() {
 function openHistory(teamIndex) {
   if (!state.teams[teamIndex]) return
   state.displayHistoryTeamIndex = teamIndex
+  state.displayKanaTeamIndex = null
 }
 
 function closeHistory() {
   state.displayHistoryTeamIndex = null
+}
+
+function openKana(teamIndex) {
+  if (!state.teams[teamIndex]) return
+  state.displayKanaTeamIndex = teamIndex
+  state.displayHistoryTeamIndex = null
+}
+
+function closeKana() {
+  state.displayKanaTeamIndex = null
+}
+
+function revealAnswer(teamIndex) {
+  const team = state.teams[teamIndex]
+  if (state.phase !== 'finished' || !team || team.solvedBy) return
+  team.answerRevealed = true
+}
+
+function historyGridStyle(team) {
+  const count = Math.max(1, team?.guesses?.length || 0)
+  const columns = count <= 8 ? 1 : count <= 18 ? 2 : count <= 30 ? 3 : count <= 45 ? 4 : 5
+  return {
+    '--history-columns': columns,
+    '--history-rows': Math.ceil(count / columns),
+  }
 }
 
 function undo() {
@@ -598,7 +662,7 @@ function undo() {
 }
 
 function displayAnswer(team) {
-  if (team.solvedBy || state.phase === 'finished') return splitWordleWord(team.secret)
+  if (team.solvedBy || team.answerRevealed) return splitWordleWord(team.secret)
   return Array(WORDLE_LENGTH).fill('？')
 }
 
@@ -642,7 +706,6 @@ async function restoreBackup(event) {
       restored.teams.length < 2
       || restored.teams.length > 3
       || secrets.some(result => !result.valid)
-      || new Set(secrets.map(result => result.word)).size !== restored.teams.length
     ) throw new Error()
     Object.assign(state, restored)
     stopThinkingTimer()
@@ -747,15 +810,28 @@ async function restoreBackup(event) {
 .wordle-winner strong { color: #fff; font-size: clamp(2.5rem, 9vw, 6rem); }
 .wordle-winner p { color: #cfd8dc; font-size: 1.15rem; }
 .winner-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
-.history-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.86); }
-.history-overlay__panel { width: min(760px, 94vw); max-height: 88vh; box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; padding: 20px; border: 3px solid var(--team); border-radius: 18px; background: #080d10; box-shadow: 0 0 35px color-mix(in srgb, var(--team) 34%, transparent); }
+.history-overlay, .kana-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.9); }
+.history-overlay__panel, .kana-overlay__panel { width: 96vw; height: 94vh; box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 18px; border: 3px solid var(--team); border-radius: 18px; background: #080d10; box-shadow: 0 0 35px color-mix(in srgb, var(--team) 34%, transparent); }
 .history-overlay__panel > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .history-overlay__panel > header span { color: var(--team); font-size: .68rem; font-weight: 900; letter-spacing: .15em; }
 .history-overlay__panel h2 { margin: 2px 0 0; }
-.history-overlay__list { min-height: 0; display: grid; gap: 9px; overflow-y: auto; padding-right: 5px; }
-.history-overlay__entry { display: grid; grid-template-columns: 38px 110px minmax(0, 1fr); align-items: center; gap: 8px; }
+.history-overlay__list { min-height: 0; display: grid; grid-template-columns: repeat(var(--history-columns), minmax(0, 1fr)); grid-template-rows: repeat(var(--history-rows), minmax(0, 1fr)); grid-auto-flow: column; gap: 7px 12px; overflow: hidden; }
+.history-overlay__entry { min-height: 0; display: grid; grid-template-columns: 34px minmax(60px, .7fr) minmax(120px, 1.5fr); align-items: center; gap: 6px; padding: 3px 6px; border-radius: 7px; background: rgba(255,255,255,.035); }
 .history-overlay__entry > strong { color: #ffd54f; text-align: right; }
 .history-overlay__entry > small { overflow: hidden; color: #b0bec5; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.history-overlay__entry .guess-row span { min-height: 0; height: clamp(25px, 4.1vh, 48px); aspect-ratio: auto; font-size: clamp(.75rem, 2.2vh, 1.35rem); }
+.kana-overlay__panel { grid-template-rows: auto auto minmax(0, 1fr); }
+.kana-overlay__panel > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.kana-overlay__panel > header span { color: var(--team); font-size: .72rem; font-weight: 900; letter-spacing: .16em; }
+.kana-overlay__panel h2, .kana-overlay__panel p { margin: 2px 0; }
+.kana-overlay__panel > p { color: #b0bec5; }
+.kana-groups { min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; overflow: hidden; }
+.kana-group { min-height: 0; padding: 11px; border: 1px solid #455a64; border-radius: 12px; background: #11191d; }
+.kana-group h3 { margin: 0 0 8px; color: #ffd54f; }
+.kana-group h3 small { color: #90a4ae; }
+.kana-characters { display: grid; grid-template-columns: repeat(auto-fit, minmax(38px, 1fr)); gap: 6px; }
+.kana-characters span { display: grid; min-height: 38px; place-items: center; border: 1px solid #607d8b; border-radius: 7px; background: #263238; font-size: clamp(1rem, 2.5vw, 1.5rem); font-weight: 900; }
+.kana-characters em { color: #78909c; font-style: normal; }
 .history-empty { padding: 35px; color: #90a4ae; text-align: center; }
 .wordle-data { color: #b0bec5; }
 .wordle-data summary { color: #eceff1; cursor: pointer; font-weight: 900; }
@@ -780,10 +856,15 @@ async function restoreBackup(event) {
   .challenge-input__row { grid-template-columns: 1fr; }
   .thinking-timer { align-items: stretch; flex-direction: column; gap: 8px; }
   .thinking-timer__actions { justify-content: center; }
-  .history-overlay { padding: 7px; }
-  .history-overlay__panel { width: 100%; padding: 13px; }
+  .history-overlay, .kana-overlay { padding: 5px; }
+  .history-overlay__panel, .kana-overlay__panel { width: 100%; height: 98vh; padding: 10px; }
   .history-overlay__panel > header { align-items: flex-start; }
-  .history-overlay__entry { grid-template-columns: 32px minmax(0, 1fr); }
-  .history-overlay__entry .guess-row { grid-column: 1 / -1; }
+  .history-overlay__entry { grid-template-columns: 25px minmax(0, 1fr); gap: 3px; padding: 2px; }
+  .history-overlay__entry > small { display: none; }
+  .history-overlay__entry .guess-row span { height: clamp(20px, 3.7vh, 36px); font-size: clamp(.64rem, 1.8vh, 1rem); }
+  .kana-groups { grid-template-columns: 1fr; gap: 6px; }
+  .kana-group { padding: 7px; }
+  .kana-characters { grid-template-columns: repeat(auto-fit, minmax(28px, 1fr)); gap: 3px; }
+  .kana-characters span { min-height: 27px; font-size: .9rem; }
 }
 </style>

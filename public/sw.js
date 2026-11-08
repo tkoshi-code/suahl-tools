@@ -1,4 +1,4 @@
-const CACHE = 'suahl-tools-v43'
+const CACHE = 'suahl-tools-v44'
 const APP_SHELL = ['./', './index.html', './manifest.json', './favicon.svg', './icons.svg']
 
 self.addEventListener('install', event => {

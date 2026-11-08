@@ -51,6 +51,7 @@
               <strong v-else-if="state.phase === 'finished'" class="status winner">WINNER</strong>
               <strong v-else class="status">防衛中</strong>
               <button type="button" @click="requestHistory(teamIndex)">全履歴 {{ team.guesses.length }}件</button>
+              <button type="button" @click="requestKana(teamIndex)">未使用の五十音</button>
             </div>
           </header>
 
@@ -92,7 +93,7 @@
             <button type="button" class="display-history-close" @click="requestHistory(null)">✕ 閉じる</button>
           </header>
           <p v-if="historyTeam.guesses.length === 0" class="display-history-empty">まだ予想履歴はありません。</p>
-          <div v-else class="display-history-list">
+          <div v-else class="display-history-list" :style="historyGridStyle(historyTeam)">
             <div v-for="(guess, guessIndex) in historyTeam.guesses" :key="guess.id" class="display-history-entry">
               <strong>#{{ guessIndex + 1 }}</strong>
               <small>{{ challengerName(guess.challengerId) }}</small>
@@ -108,10 +109,33 @@
         </article>
       </section>
 
+      <section v-if="kanaTeam" class="display-kana-overlay" aria-live="polite">
+        <article class="display-kana-panel" :style="{ '--team': kanaTeam.color }">
+          <header>
+            <div>
+              <span>UNUSED KANA</span>
+              <h2>{{ kanaTeam.name }}がまだ使っていない文字</h2>
+            </div>
+            <button type="button" class="display-history-close" @click="requestKana(null)">✕ 閉じる</button>
+          </header>
+          <p>このチームへの予想履歴に、まだ一度も登場していない文字です。</p>
+          <div class="display-kana-groups">
+            <section v-for="group in unusedKanaGroups" :key="group.label" class="display-kana-group">
+              <h3>{{ group.label }} <small>{{ group.characters.length }}字</small></h3>
+              <div class="display-kana-characters">
+                <span v-for="character in group.characters" :key="character">{{ character }}</span>
+                <em v-if="group.characters.length === 0">すべて使用済み</em>
+              </div>
+            </section>
+          </div>
+        </article>
+      </section>
+
       <section v-if="state.phase === 'finished' && winner && state.showWinnerOverlay" class="display-winner">
         <span>WORD SURVIVOR</span>
         <strong>{{ winner.name }}</strong>
-        <p>秘密ワード「{{ winner.revealedAnswer }}」を守り切りました</p>
+        <p v-if="winner.revealedAnswer">秘密ワード「{{ winner.revealedAnswer }}」を守り切りました</p>
+        <p v-else>秘密ワードはまだ非公開です</p>
       </section>
     </template>
   </main>
@@ -123,6 +147,7 @@ import {
   WORDLE_DISPLAY_CHANNEL,
   WORDLE_DISPLAY_STORAGE_KEY,
   WORDLE_LENGTH,
+  getUnusedWordleKana,
   splitWordleWord,
 } from '../utils/wordle.js'
 
@@ -131,6 +156,8 @@ const displayChannel = typeof BroadcastChannel === 'function' ? new BroadcastCha
 
 const winner = computed(() => state.phase === 'finished' ? state.teams.find(team => !team.solvedBy) || null : null)
 const historyTeam = computed(() => state.teams[state.displayHistoryTeamIndex] || null)
+const kanaTeam = computed(() => state.teams[state.displayKanaTeamIndex] || null)
+const unusedKanaGroups = computed(() => getUnusedWordleKana(kanaTeam.value?.guesses || []))
 const formattedThinkingTime = computed(() => `00:${String(state.thinkingSeconds).padStart(2, '0')}`)
 const phaseInstruction = computed(() => {
   if (state.phase === 'finished') return `${winner.value?.name || '勝者'}の勝利`
@@ -143,7 +170,7 @@ onMounted(() => {
   window.addEventListener('storage', handleStorage)
   if (displayChannel) {
     displayChannel.onmessage = event => {
-      if (event.data?.type === 'history-request') return
+      if (['history-request', 'kana-request'].includes(event.data?.type)) return
       applyDisplayState(event.data)
     }
   }
@@ -161,6 +188,7 @@ function emptyDisplayState() {
     challengerIndex: null,
     targetIndex: null,
     displayHistoryTeamIndex: null,
+    displayKanaTeamIndex: null,
     thinkingSeconds: 30,
     thinkingRunning: false,
     showWinnerOverlay: true,
@@ -191,6 +219,7 @@ function sanitizeDisplayState(value) {
     challengerIndex: Number.isInteger(value.challengerIndex) ? value.challengerIndex : null,
     targetIndex: Number.isInteger(value.targetIndex) ? value.targetIndex : null,
     displayHistoryTeamIndex: Number.isInteger(value.displayHistoryTeamIndex) ? value.displayHistoryTeamIndex : null,
+    displayKanaTeamIndex: Number.isInteger(value.displayKanaTeamIndex) ? value.displayKanaTeamIndex : null,
     thinkingSeconds: Number.isInteger(value.thinkingSeconds) ? Math.max(0, Math.min(30, value.thinkingSeconds)) : 30,
     thinkingRunning: Boolean(value.thinkingRunning),
     showWinnerOverlay: value.showWinnerOverlay !== false,
@@ -224,7 +253,23 @@ function challengerName(challengerId) {
 
 function requestHistory(teamIndex) {
   state.displayHistoryTeamIndex = Number.isInteger(teamIndex) && state.teams[teamIndex] ? teamIndex : null
+  state.displayKanaTeamIndex = null
   displayChannel?.postMessage({ type: 'history-request', teamIndex: state.displayHistoryTeamIndex })
+}
+
+function requestKana(teamIndex) {
+  state.displayKanaTeamIndex = Number.isInteger(teamIndex) && state.teams[teamIndex] ? teamIndex : null
+  state.displayHistoryTeamIndex = null
+  displayChannel?.postMessage({ type: 'kana-request', teamIndex: state.displayKanaTeamIndex })
+}
+
+function historyGridStyle(team) {
+  const count = Math.max(1, team?.guesses?.length || 0)
+  const columns = count <= 8 ? 1 : count <= 18 ? 2 : count <= 30 ? 3 : count <= 45 ? 4 : 5
+  return {
+    '--history-columns': columns,
+    '--history-rows': Math.ceil(count / columns),
+  }
 }
 </script>
 
@@ -277,16 +322,29 @@ function requestHistory(teamIndex) {
 .display-guess-row span.letter-absent { border-color: #455a64; background: #263238; color: #b0bec5; }
 .display-guess-entry.empty { opacity: .24; }
 .older-count { margin: 8px 0 0; color: #90a4ae; text-align: right; font-size: .72rem; font-weight: 800; }
-.display-history-overlay, .display-winner { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.92); }
-.display-history-panel { width: min(900px, 94vw); max-height: 90vh; box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; padding: 24px; border: 4px solid var(--team); border-radius: 20px; background: #080d10; }
+.display-history-overlay, .display-kana-overlay, .display-winner { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.92); }
+.display-history-panel, .display-kana-panel { width: 96vw; height: 94vh; box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; padding: 20px; border: 4px solid var(--team); border-radius: 20px; background: #080d10; }
 .display-history-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
 .display-history-panel > header span { color: var(--team); font-size: .75rem; font-weight: 900; letter-spacing: .15em; }
 .display-history-panel h2 { margin: 2px 0; font-size: 2rem; }
-.display-history-list { min-height: 0; display: grid; gap: 10px; overflow-y: auto; }
-.display-history-entry { display: grid; grid-template-columns: 44px 130px minmax(0, 1fr); align-items: center; gap: 10px; }
+.display-history-list { min-height: 0; display: grid; grid-template-columns: repeat(var(--history-columns), minmax(0, 1fr)); grid-template-rows: repeat(var(--history-rows), minmax(0, 1fr)); grid-auto-flow: column; gap: 7px 13px; overflow: hidden; }
+.display-history-entry { min-height: 0; display: grid; grid-template-columns: 38px minmax(70px, .7fr) minmax(140px, 1.5fr); align-items: center; gap: 7px; padding: 3px 7px; border-radius: 8px; background: rgba(255,255,255,.035); }
 .display-history-entry > strong { color: #ffd54f; text-align: right; }
 .display-history-entry > small { overflow: hidden; color: #b0bec5; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.display-history-entry .display-guess-row span { min-height: 0; height: clamp(26px, 4.2vh, 50px); aspect-ratio: auto; font-size: clamp(.78rem, 2.2vh, 1.4rem); }
 .display-history-empty { padding: 50px; color: #90a4ae; text-align: center; }
+.display-kana-panel { grid-template-rows: auto auto minmax(0, 1fr); }
+.display-kana-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.display-kana-panel > header span { color: var(--team); font-size: .75rem; font-weight: 900; letter-spacing: .15em; }
+.display-kana-panel h2, .display-kana-panel p { margin: 2px 0; }
+.display-kana-panel > p { color: #b0bec5; }
+.display-kana-groups { min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; overflow: hidden; }
+.display-kana-group { min-height: 0; padding: 12px; border: 1px solid #455a64; border-radius: 12px; background: #11191d; }
+.display-kana-group h3 { margin: 0 0 8px; color: #ffd54f; }
+.display-kana-group h3 small { color: #90a4ae; }
+.display-kana-characters { display: grid; grid-template-columns: repeat(auto-fit, minmax(42px, 1fr)); gap: 6px; }
+.display-kana-characters span { display: grid; min-height: 40px; place-items: center; border: 1px solid #607d8b; border-radius: 7px; background: #263238; font-size: clamp(1.1rem, 2.6vw, 1.65rem); font-weight: 900; }
+.display-kana-characters em { color: #78909c; font-style: normal; }
 .display-winner { z-index: 30; align-content: center; justify-items: center; text-align: center; }
 .display-winner span { color: #ffd54f; font-weight: 900; letter-spacing: .25em; }
 .display-winner > strong { font-size: clamp(4rem, 12vw, 9rem); }
@@ -296,5 +354,14 @@ function requestHistory(teamIndex) {
   .display-header { grid-template-columns: 1fr auto; }
   .display-legend { grid-column: 1 / -1; justify-content: center; }
   .display-boards { grid-template-columns: 1fr; max-width: 650px; }
+  .display-history-overlay, .display-kana-overlay { padding: 5px; }
+  .display-history-panel, .display-kana-panel { width: 100%; height: 98vh; padding: 10px; }
+  .display-history-entry { grid-template-columns: 27px minmax(0, 1fr); gap: 3px; padding: 2px; }
+  .display-history-entry > small { display: none; }
+  .display-history-entry .display-guess-row span { height: clamp(20px, 3.7vh, 37px); font-size: clamp(.65rem, 1.8vh, 1rem); }
+  .display-kana-groups { grid-template-columns: 1fr; gap: 6px; }
+  .display-kana-group { padding: 7px; }
+  .display-kana-characters { grid-template-columns: repeat(auto-fit, minmax(29px, 1fr)); gap: 3px; }
+  .display-kana-characters span { min-height: 27px; font-size: .92rem; }
 }
 </style>
