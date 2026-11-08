@@ -46,6 +46,11 @@
       @back="currentView = 'home'"
     />
 
+    <!-- 文字あて Wordle（会場表示） -->
+    <WordleDisplayView
+      v-else-if="currentView === 'wordle-display'"
+    />
+
     <!-- コーナールール表示 -->
     <CornerRulesView
       v-else-if="currentView === 'corner'"
@@ -198,8 +203,9 @@ import SlotMillionaireView from './components/SlotMillionaireView.vue'
 import SalesEventView from './components/SalesEventView.vue'
 import SalesScoreView from './components/SalesScoreView.vue'
 import WordleView from './components/WordleView.vue'
+import WordleDisplayView from './components/WordleDisplayView.vue'
 
-const APP_VERSION = window.APP_VERSION || '1.39'
+const APP_VERSION = window.APP_VERSION || '1.40'
 const CHANGELOG = window.CHANGELOG || []
 
 const {
@@ -216,7 +222,7 @@ const {
 } = useGame()
 
 const requestedView = new URLSearchParams(window.location.search).get('view')
-const popupViews = ['announcement', 'spotify-intro', 'spotify-audience', 'sales-score']
+const popupViews = ['announcement', 'spotify-intro', 'spotify-audience', 'sales-score', 'wordle-display']
 const directViews = [...popupViews, 'sales-event', 'wordle']
 const isPopupWindow = popupViews.includes(requestedView)
 const currentView = ref(directViews.includes(requestedView) ? requestedView : 'home')

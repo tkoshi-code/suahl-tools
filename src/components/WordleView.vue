@@ -7,6 +7,7 @@
         <h1>文字あて Wordle</h1>
       </div>
       <div class="wordle-header__actions">
+        <button class="wordle-button wordle-button--display" @click="openDisplayWindow">会場表示を開く</button>
         <button class="wordle-button wordle-button--ghost" @click="showRules = !showRules">ルール</button>
         <button v-if="state.phase !== 'setup'" class="wordle-button wordle-button--ghost" @click="confirmNewGame">新しいゲーム</button>
       </div>
@@ -21,6 +22,8 @@
         <li>濁音・半濁音・小さい文字・長音は、それぞれ別の1文字として判定します。</li>
         <li>秘密ワードと予想には、同じ文字を2回使えません。</li>
         <li>秘密ワードを当てられたチームは撃破。最後まで秘密ワードが残ったチームが勝利です。</li>
+        <li>秘密ワードの登録と文字入力は操作用画面だけで行い、会場表示へ未正解の秘密ワードは送りません。</li>
+        <li>シンキングタイマーは30秒です。スタートボタンを押すまで減らず、0秒でも進行は自動で変わりません。</li>
       </ol>
     </section>
 
@@ -83,6 +86,7 @@
       </div>
 
       <p class="wordle-note">全角・半角は入力時に統一します。「か」と「が」、「は」と「ぱ」は別の文字です。</p>
+      <p class="wordle-secret-note">🔒 この登録内容は操作用画面だけに保存され、会場表示用データには含まれません。</p>
       <p v-if="setupError" class="wordle-error">{{ setupError }}</p>
       <button class="wordle-button wordle-button--primary wordle-start" @click="startGame">ゲーム開始</button>
     </section>
@@ -122,9 +126,12 @@
               <span>TEAM {{ teamIndex + 1 }}</span>
               <h2>{{ team.name }}</h2>
             </div>
-            <strong v-if="team.solvedBy" class="team-status team-status--out">撃破</strong>
-            <strong v-else-if="state.phase === 'finished'" class="team-status team-status--winner">WINNER</strong>
-            <strong v-else class="team-status">防衛中</strong>
+            <div class="wordle-board__actions">
+              <strong v-if="team.solvedBy" class="team-status team-status--out">撃破</strong>
+              <strong v-else-if="state.phase === 'finished'" class="team-status team-status--winner">WINNER</strong>
+              <strong v-else class="team-status">防衛中</strong>
+              <button class="history-button" type="button" @click="openHistory(teamIndex)">全履歴 {{ team.guesses.length }}件</button>
+            </div>
           </header>
 
           <div class="answer-row" :aria-label="team.solvedBy ? `正解は${team.secret}` : '秘密ワードは非表示'">
@@ -155,6 +162,19 @@
       </section>
 
       <section v-if="state.phase !== 'finished'" class="wordle-panel challenge-console">
+        <div class="thinking-timer" :class="{ urgent: state.thinkingSeconds <= 5, running: state.thinkingRunning }">
+          <div>
+            <span>THINKING TIMER</span>
+            <strong>{{ formattedThinkingTime }}</strong>
+          </div>
+          <div class="thinking-timer__actions">
+            <button class="wordle-button wordle-button--primary" type="button" @click="toggleThinkingTimer">
+              {{ state.thinkingRunning ? '⏸ 一時停止' : state.thinkingSeconds < 30 && state.thinkingSeconds > 0 ? '▶ 再開' : '▶ スタート' }}
+            </button>
+            <button class="wordle-button wordle-button--ghost" type="button" @click="resetThinkingTimer">↻ 30秒</button>
+          </div>
+        </div>
+
         <div v-if="state.challengerIndex === null" class="challenge-step">
           <p class="wordle-kicker">QUIZ CORRECT</p>
           <h2>クイズに正解したチームを選択</h2>
@@ -207,11 +227,40 @@
         </form>
       </section>
 
-      <section v-if="state.phase === 'finished' && winner" class="wordle-winner" aria-live="assertive">
+      <section v-if="state.phase === 'finished' && winner && state.showWinnerOverlay" class="wordle-winner" aria-live="assertive">
         <span>WORD SURVIVOR</span>
         <strong>{{ winner.name }}</strong>
         <p>秘密ワード「{{ winner.secret }}」を守り切りました</p>
-        <button class="wordle-button wordle-button--primary" @click="confirmNewGame">新しいゲーム</button>
+        <div class="winner-actions">
+          <button class="wordle-button wordle-button--secondary" @click="state.showWinnerOverlay = false">盤面と履歴を見る</button>
+          <button class="wordle-button wordle-button--primary" @click="confirmNewGame">新しいゲーム</button>
+        </div>
+      </section>
+
+      <section v-if="historyTeam" class="history-overlay" role="dialog" aria-modal="true" :aria-label="`${historyTeam.name}の全履歴`" @click.self="closeHistory">
+        <article class="history-overlay__panel" :style="{ '--team': historyTeam.color }">
+          <header>
+            <div>
+              <span>FULL HISTORY</span>
+              <h2>{{ historyTeam.name }}への予想 全{{ historyTeam.guesses.length }}件</h2>
+            </div>
+            <button class="wordle-button wordle-button--ghost" type="button" @click="closeHistory">✕ 閉じる</button>
+          </header>
+          <p v-if="historyTeam.guesses.length === 0" class="history-empty">まだ予想履歴はありません。</p>
+          <div v-else class="history-overlay__list">
+            <div v-for="(guess, guessIndex) in historyTeam.guesses" :key="guess.id" class="history-overlay__entry">
+              <strong>#{{ guessIndex + 1 }}</strong>
+              <small>{{ challengerName(guess.challengerId) }}</small>
+              <div class="guess-row">
+                <span
+                  v-for="(character, index) in splitWordleWord(guess.word)"
+                  :key="index"
+                  :class="`letter-${guess.result[index]}`"
+                >{{ character }}</span>
+              </div>
+            </div>
+          </div>
+        </article>
       </section>
 
       <details class="wordle-panel wordle-data">
@@ -228,9 +277,12 @@
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import {
+  WORDLE_DISPLAY_CHANNEL,
+  WORDLE_DISPLAY_STORAGE_KEY,
   WORDLE_LENGTH,
+  createWordlePublicState,
   evaluateWordleGuess,
   isWordleSolved,
   normalizeWordleWord,
@@ -261,6 +313,8 @@ const guessInput = ref('')
 const guessInputElement = ref(null)
 const undoStack = ref([])
 const hasSave = ref(Boolean(savedState))
+const displayChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(WORDLE_DISPLAY_CHANNEL) : null
+let thinkingTimerHandle = null
 
 const challengerTeam = computed(() => state.teams[state.challengerIndex] || null)
 const targetTeam = computed(() => state.teams[state.targetIndex] || null)
@@ -268,6 +322,8 @@ const targetCandidates = computed(() => state.teams
   .map((team, index) => ({ team, index }))
   .filter(entry => entry.index !== state.challengerIndex && !entry.team.solvedBy))
 const winner = computed(() => state.phase === 'finished' ? state.teams.find(team => !team.solvedBy) || null : null)
+const historyTeam = computed(() => state.teams[state.displayHistoryTeamIndex] || null)
+const formattedThinkingTime = computed(() => `00:${String(state.thinkingSeconds).padStart(2, '0')}`)
 const phaseInstruction = computed(() => {
   if (state.phase === 'finished') return `${winner.value?.name || '勝者'}の勝利`
   if (state.challengerIndex === null) return 'クイズ正解チームを選ぶ'
@@ -275,7 +331,12 @@ const phaseInstruction = computed(() => {
   return `${challengerTeam.value?.name || '正解チーム'}が${targetTeam.value?.name || '相手'}の5文字を予想する`
 })
 
-watch(state, saveState, { deep: true })
+watch(state, saveState, { deep: true, immediate: true })
+
+onUnmounted(() => {
+  clearInterval(thinkingTimerHandle)
+  displayChannel?.close()
+})
 
 function emptyState() {
   return {
@@ -284,6 +345,10 @@ function emptyState() {
     teams: [],
     challengerIndex: null,
     targetIndex: null,
+    displayHistoryTeamIndex: null,
+    thinkingSeconds: 30,
+    thinkingRunning: false,
+    showWinnerOverlay: true,
   }
 }
 
@@ -316,6 +381,10 @@ function migrateState(value) {
   })) : []
   value.challengerIndex = Number.isInteger(value.challengerIndex) ? value.challengerIndex : null
   value.targetIndex = Number.isInteger(value.targetIndex) ? value.targetIndex : null
+  value.displayHistoryTeamIndex = Number.isInteger(value.displayHistoryTeamIndex) ? value.displayHistoryTeamIndex : null
+  value.thinkingSeconds = Number.isInteger(value.thinkingSeconds) ? Math.max(0, Math.min(30, value.thinkingSeconds)) : 30
+  value.thinkingRunning = false
+  value.showWinnerOverlay = value.showWinnerOverlay !== false
   return value
 }
 
@@ -332,6 +401,7 @@ function loadSaved() {
 }
 
 function saveState() {
+  syncDisplayState()
   if (state.phase === 'setup') return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -339,6 +409,25 @@ function saveState() {
   } catch {
     dataError.value = 'ゲームを保存できませんでした。ブラウザの保存容量を確認してください。'
   }
+}
+
+function syncDisplayState() {
+  try {
+    const publicState = createWordlePublicState(state)
+    localStorage.setItem(WORDLE_DISPLAY_STORAGE_KEY, JSON.stringify(publicState))
+    displayChannel?.postMessage(publicState)
+  } catch {
+    dataError.value = '会場表示へ同期できませんでした。ブラウザの保存容量を確認してください。'
+  }
+}
+
+function openDisplayWindow() {
+  syncDisplayState()
+  const url = new URL(window.location.href)
+  url.search = ''
+  url.hash = ''
+  url.searchParams.set('view', 'wordle-display')
+  window.open(url, 'piyopiyo-wordle-display', 'popup=yes,width=1440,height=900')
 }
 
 function toggleSecret(index) {
@@ -376,6 +465,10 @@ function startGame() {
     teams: teams.map((team, index) => makeTeam({ ...team, name: names[index], secret: validations[index].word }, index)),
     challengerIndex: null,
     targetIndex: null,
+    displayHistoryTeamIndex: null,
+    thinkingSeconds: 30,
+    thinkingRunning: false,
+    showWinnerOverlay: true,
   })
   visibleSecrets.value = new Set()
   undoStack.value = []
@@ -389,12 +482,14 @@ function resumeGame() {
     return
   }
   Object.assign(state, saved)
+  stopThinkingTimer()
   guessInput.value = ''
   undoStack.value = []
 }
 
 function selectChallenger(index) {
   if (state.teams[index]?.solvedBy) return
+  resetThinkingTimer()
   state.challengerIndex = index
   const candidates = state.teams
     .map((team, targetIndex) => ({ team, targetIndex }))
@@ -410,6 +505,7 @@ function selectTarget(index) {
 }
 
 function cancelChallenge() {
+  resetThinkingTimer()
   state.challengerIndex = null
   state.targetIndex = null
   guessInput.value = ''
@@ -440,9 +536,47 @@ function submitGuess() {
   if (isWordleSolved(result)) {
     targetTeam.value.solvedBy = challengerTeam.value.id
     const survivors = state.teams.filter(team => !team.solvedBy)
-    if (survivors.length === 1) state.phase = 'finished'
+    if (survivors.length === 1) {
+      state.phase = 'finished'
+      state.showWinnerOverlay = true
+    }
   }
   cancelChallenge()
+}
+
+function toggleThinkingTimer() {
+  if (state.thinkingRunning) {
+    stopThinkingTimer()
+    return
+  }
+  if (state.thinkingSeconds <= 0) state.thinkingSeconds = 30
+  state.thinkingRunning = true
+  clearInterval(thinkingTimerHandle)
+  thinkingTimerHandle = setInterval(() => {
+    if (!state.thinkingRunning) return
+    state.thinkingSeconds = Math.max(0, state.thinkingSeconds - 1)
+    if (state.thinkingSeconds === 0) stopThinkingTimer()
+  }, 1000)
+}
+
+function stopThinkingTimer() {
+  clearInterval(thinkingTimerHandle)
+  thinkingTimerHandle = null
+  state.thinkingRunning = false
+}
+
+function resetThinkingTimer() {
+  stopThinkingTimer()
+  state.thinkingSeconds = 30
+}
+
+function openHistory(teamIndex) {
+  if (!state.teams[teamIndex]) return
+  state.displayHistoryTeamIndex = teamIndex
+}
+
+function closeHistory() {
+  state.displayHistoryTeamIndex = null
 }
 
 function undo() {
@@ -471,6 +605,7 @@ function confirmNewGame() {
   setup.teams.forEach(team => { team.secret = '' })
   localStorage.removeItem(STORAGE_KEY)
   Object.assign(state, emptyState())
+  resetThinkingTimer()
   visibleSecrets.value = new Set()
   undoStack.value = []
   hasSave.value = false
@@ -500,6 +635,7 @@ async function restoreBackup(event) {
       || new Set(secrets.map(result => result.word)).size !== restored.teams.length
     ) throw new Error()
     Object.assign(state, restored)
+    stopThinkingTimer()
     guessInput.value = ''
     undoStack.value = []
   } catch {
@@ -523,6 +659,7 @@ async function restoreBackup(event) {
 .wordle-button.selected, .wordle-button--primary { border-color: #ff8f00; background: #e65100; }
 .wordle-button--secondary { background: #37474f; }
 .wordle-button--ghost { background: transparent; }
+.wordle-button--display { border-color: #26c6da; background: #006064; }
 .wordle-rules { line-height: 1.7; }
 .wordle-rules h2 { margin-top: 0; }
 .wordle-rules li { margin: 5px 0; }
@@ -541,6 +678,7 @@ async function restoreBackup(event) {
 .secret-input-row { display: flex; gap: 5px; }
 .secret-toggle { flex: none; min-height: 0; padding: 7px 9px; font-size: .7rem; }
 .wordle-note { color: #90a4ae; font-size: .78rem; }
+.wordle-secret-note { padding: 9px 11px; border: 1px solid #26c6da; border-radius: 9px; background: rgba(0,96,100,.2); color: #b2ebf2; font-size: .8rem; font-weight: 800; }
 .wordle-error { color: #ff8a80; font-weight: 800; }
 .wordle-start { width: 100%; min-height: 50px; font-size: 1rem; }
 .wordle-progress { max-width: 1440px; display: grid; grid-template-columns: minmax(230px, .8fr) minmax(420px, 1.6fr) auto; align-items: center; gap: 10px; padding: 10px 14px; }
@@ -560,6 +698,9 @@ async function restoreBackup(event) {
 .wordle-board__header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .wordle-board__header span { color: var(--team); font-size: .68rem; font-weight: 900; letter-spacing: .08em; }
 .wordle-board__header h2 { margin: 1px 0; overflow: hidden; font-size: 1.22rem; text-overflow: ellipsis; white-space: nowrap; }
+.wordle-board__actions { display: grid; justify-items: end; gap: 5px; }
+.history-button { min-height: 27px; padding: 4px 8px; border: 1px solid #607d8b; border-radius: 7px; background: #182126; color: #eceff1; font: inherit; font-size: .64rem; font-weight: 900; cursor: pointer; }
+.history-button:hover { border-color: #ffd54f; }
 .team-status { flex: none; padding: 4px 8px; border: 1px solid #607d8b; border-radius: 99px; color: #b0bec5; font-size: .65rem; }
 .team-status--out { border-color: #ef5350; color: #ff8a80; }
 .team-status--winner { border-color: #ffd54f; background: #5d4500; color: #fff7c2; }
@@ -576,6 +717,14 @@ async function restoreBackup(event) {
 .guess-entry--empty { opacity: .28; }
 .guess-entry--empty .guess-row span { font-size: .85rem; }
 .challenge-console { max-width: 920px; text-align: center; }
+.thinking-timer { margin: -3px auto 16px; padding: 10px 12px; display: flex; justify-content: center; align-items: center; gap: 18px; border: 2px solid #546e7a; border-radius: 12px; background: #080d10; }
+.thinking-timer > div:first-child { display: grid; }
+.thinking-timer span { color: #90a4ae; font-size: .64rem; font-weight: 900; letter-spacing: .15em; }
+.thinking-timer strong { color: #fff; font-variant-numeric: tabular-nums; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1; }
+.thinking-timer.running { border-color: #26c6da; box-shadow: 0 0 16px rgba(38,198,218,.18); }
+.thinking-timer.urgent { border-color: #ff5252; background: #2a0909; animation: timer-pulse .7s ease-in-out infinite alternate; }
+.thinking-timer__actions { display: flex; gap: 7px; }
+@keyframes timer-pulse { to { box-shadow: 0 0 22px rgba(255,82,82,.4); } }
 .challenge-step h2 { margin: 4px 0 14px; }
 .challenge-team-buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 11px 0; }
 .challenge-team-button { min-width: 150px; border: 2px solid var(--team); background: color-mix(in srgb, var(--team) 28%, #151b1e); }
@@ -587,6 +736,17 @@ async function restoreBackup(event) {
 .wordle-winner span { color: #ffd54f; font-weight: 900; letter-spacing: .22em; }
 .wordle-winner strong { color: #fff; font-size: clamp(2.5rem, 9vw, 6rem); }
 .wordle-winner p { color: #cfd8dc; font-size: 1.15rem; }
+.winner-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.history-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.86); }
+.history-overlay__panel { width: min(760px, 94vw); max-height: 88vh; box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; padding: 20px; border: 3px solid var(--team); border-radius: 18px; background: #080d10; box-shadow: 0 0 35px color-mix(in srgb, var(--team) 34%, transparent); }
+.history-overlay__panel > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.history-overlay__panel > header span { color: var(--team); font-size: .68rem; font-weight: 900; letter-spacing: .15em; }
+.history-overlay__panel h2 { margin: 2px 0 0; }
+.history-overlay__list { min-height: 0; display: grid; gap: 9px; overflow-y: auto; padding-right: 5px; }
+.history-overlay__entry { display: grid; grid-template-columns: 38px 110px minmax(0, 1fr); align-items: center; gap: 8px; }
+.history-overlay__entry > strong { color: #ffd54f; text-align: right; }
+.history-overlay__entry > small { overflow: hidden; color: #b0bec5; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.history-empty { padding: 35px; color: #90a4ae; text-align: center; }
 .wordle-data { color: #b0bec5; }
 .wordle-data summary { color: #eceff1; cursor: pointer; font-weight: 900; }
 .wordle-data > div { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -608,5 +768,12 @@ async function restoreBackup(event) {
   .guess-entry { grid-template-columns: 55px minmax(0, 1fr); }
   .answer-row span, .guess-row span { font-size: 1.25rem; }
   .challenge-input__row { grid-template-columns: 1fr; }
+  .thinking-timer { align-items: stretch; flex-direction: column; gap: 8px; }
+  .thinking-timer__actions { justify-content: center; }
+  .history-overlay { padding: 7px; }
+  .history-overlay__panel { width: 100%; padding: 13px; }
+  .history-overlay__panel > header { align-items: flex-start; }
+  .history-overlay__entry { grid-template-columns: 32px minmax(0, 1fr); }
+  .history-overlay__entry .guess-row { grid-column: 1 / -1; }
 }
 </style>

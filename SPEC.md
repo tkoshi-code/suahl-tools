@@ -29,6 +29,10 @@
 - 全5文字が赤になったチームを撃破とする。最後に未撃破で残ったチームを勝者とする。
 - 直前20回までの予想をメモリ内で取り消し可能とする。取り消し後の状態も自動保存する。
 - 秘密ワードは設定画面で初期状態を伏せ、ゲーム中も撃破またはゲーム終了まで表示しない。
+- 操作用画面と会場表示を別ウインドウにする。秘密ワード登録、攻撃先選択、予想入力は操作用画面だけで行う。
+- 会場表示へ同期する公開状態には未正解の秘密ワードを含めない。ゲーム開始前は準備中を表示し、撃破後またはゲーム終了後だけ答えを同期する。
+- 通常盤面には直近の予想を表示し、全履歴ボタンで全件をオーバーレイ表示する。操作用画面での開閉を会場表示へ同期する。
+- シンキングタイマーは30秒を初期表示し、手動のスタート操作後だけ1秒ずつ減らす。一時停止・再開・30秒リセットを提供し、0秒でもフェイズを自動進行しない。
 
 ## Spotifyイントロクイズの入力と出力
 
@@ -123,7 +127,9 @@
 
 ## データ構造
 
-文字あてWordleはlocalStorageキー `piyopiyo_wordle_v1` に単一状態を保存する。状態は `schemaVersion`、`phase`、`challengerIndex`、`targetIndex`、`teams` を持つ。各teamは `id`、`name`、`color`、`secret`、`guesses`、`solvedBy` を持ち、各guessは予想ID、攻撃チームID、5文字、文字別判定を保持する。JSONバックアップには秘密ワードを含むことを画面上で明示する。
+文字あてWordleはlocalStorageキー `piyopiyo_wordle_v1` に操作用の単一状態を保存する。状態は `schemaVersion`、`phase`、`challengerIndex`、`targetIndex`、`displayHistoryTeamIndex`、`thinkingSeconds`、`thinkingRunning`、`showWinnerOverlay`、`teams` を持つ。各teamは `id`、`name`、`color`、`secret`、`guesses`、`solvedBy` を持ち、各guessは予想ID、攻撃チームID、5文字、文字別判定を保持する。JSONバックアップには秘密ワードを含むことを画面上で明示する。
+
+会場表示用には `piyopiyo_wordle_display_v1` を使用する。この状態はチーム名、公開済みの予想と判定、撃破状態、タイマー、履歴オーバーレイ状態を持つが、未正解の `secret` は持たない。操作用画面から同一ブラウザの別ウインドウへlocalStorageイベントとBroadcastChannelで同期する。
 
 カスタムスロットはlocalStorageキー `piyopiyo_custom_slot_v1` に単一状態を保存する。状態は `schemaVersion`、`phase`、`targetVp`、`customizeSeconds`、`bgmVolume`、`sfxVolume`、`roundNumber`、`questionInRound`、`questionCount`、`roundPasses`、`questionReels`、`questionSlotResult`、`cardCounts`、`cardPool`、`discardPile`、`marketSets`、`draftOrder`、`spinOrder`、`scoreHistory`、`teams`、`log` を持つ。`questionReels` は3リールの見出しと候補配列、`questionSlotResult` は現在ラウンドの停止結果を保持する。`scoreHistory` は表示ラベルとチーム順の累積VP配列を保持する。各teamは `id`、`name`、`color`、`vp`、`roundCorrect`、`lineMultipliers`、`numberDeck`、`abilities`、`hand`、`spinRights`、`spinRightsRemaining`、`reels`、`hitCells`、`hitLines`、`lastResult` を持つ。`hitLines` は直前のスピンで成立したライン番号を保持し、倍率一覧の強調と計算式表示に使う。旧形式は読込時に新規フィールドを補完し、既存VP・数字山札・ライン倍率を保持する。旧保存データのチャレンジカードは共有山札・捨て札・公開セット・手札から除外し、未使用のリスクリターンはリムーブへ置換する。装着済みリスクリターンの値は保存データ内に保持するが、得点計算と画面表示には使用しない。
 

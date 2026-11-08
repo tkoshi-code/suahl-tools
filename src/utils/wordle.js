@@ -1,4 +1,6 @@
 export const WORDLE_LENGTH = 5
+export const WORDLE_DISPLAY_STORAGE_KEY = 'piyopiyo_wordle_display_v1'
+export const WORDLE_DISPLAY_CHANNEL = 'piyopiyo-wordle-display'
 
 export function normalizeWordleWord(value) {
   return String(value ?? '')
@@ -35,4 +37,32 @@ export function evaluateWordleGuess(guess, answer) {
 
 export function isWordleSolved(result) {
   return result.length === WORDLE_LENGTH && result.every(status => status === 'exact')
+}
+
+export function createWordlePublicState(state) {
+  const isPlaying = state?.phase === 'play' || state?.phase === 'finished'
+  return {
+    schemaVersion: 1,
+    phase: isPlaying ? state.phase : 'setup',
+    challengerIndex: Number.isInteger(state?.challengerIndex) ? state.challengerIndex : null,
+    targetIndex: Number.isInteger(state?.targetIndex) ? state.targetIndex : null,
+    displayHistoryTeamIndex: Number.isInteger(state?.displayHistoryTeamIndex) ? state.displayHistoryTeamIndex : null,
+    thinkingSeconds: Number.isInteger(state?.thinkingSeconds) ? Math.max(0, Math.min(30, state.thinkingSeconds)) : 30,
+    thinkingRunning: Boolean(state?.thinkingRunning),
+    showWinnerOverlay: state?.showWinnerOverlay !== false,
+    teams: isPlaying && Array.isArray(state?.teams) ? state.teams.map(team => ({
+      id: team.id,
+      name: team.name,
+      color: team.color,
+      guesses: Array.isArray(team.guesses) ? team.guesses.map(guess => ({
+        id: guess.id,
+        challengerId: guess.challengerId,
+        word: guess.word,
+        result: Array.isArray(guess.result) ? [...guess.result] : [],
+      })) : [],
+      solvedBy: team.solvedBy || null,
+      revealedAnswer: team.solvedBy || state.phase === 'finished' ? team.secret : '',
+    })) : [],
+    updatedAt: new Date().toISOString(),
+  }
 }
