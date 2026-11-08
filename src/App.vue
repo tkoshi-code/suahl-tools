@@ -212,7 +212,7 @@ import WordleView from './components/WordleView.vue'
 import WordleDisplayView from './components/WordleDisplayView.vue'
 import BoardRushView from './components/BoardRushView.vue'
 
-const APP_VERSION = window.APP_VERSION || '1.41'
+const APP_VERSION = window.APP_VERSION || '1.42'
 const CHANGELOG = window.CHANGELOG || []
 
 const {

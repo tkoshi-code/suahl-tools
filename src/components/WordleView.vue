@@ -277,7 +277,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   WORDLE_DISPLAY_CHANNEL,
   WORDLE_DISPLAY_STORAGE_KEY,
@@ -332,6 +332,16 @@ const phaseInstruction = computed(() => {
 })
 
 watch(state, saveState, { deep: true, immediate: true })
+
+onMounted(() => {
+  if (displayChannel) {
+    displayChannel.onmessage = event => {
+      if (event.data?.type !== 'history-request') return
+      const teamIndex = event.data.teamIndex
+      state.displayHistoryTeamIndex = Number.isInteger(teamIndex) && state.teams[teamIndex] ? teamIndex : null
+    }
+  }
+})
 
 onUnmounted(() => {
   clearInterval(thinkingTimerHandle)

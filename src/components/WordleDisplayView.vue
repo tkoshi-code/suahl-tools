@@ -46,9 +46,12 @@
               <span>TEAM {{ teamIndex + 1 }}</span>
               <h2>{{ team.name }}</h2>
             </div>
-            <strong v-if="team.solvedBy" class="status out">撃破</strong>
-            <strong v-else-if="state.phase === 'finished'" class="status winner">WINNER</strong>
-            <strong v-else class="status">防衛中</strong>
+            <div class="display-board__actions">
+              <strong v-if="team.solvedBy" class="status out">撃破</strong>
+              <strong v-else-if="state.phase === 'finished'" class="status winner">WINNER</strong>
+              <strong v-else class="status">防衛中</strong>
+              <button type="button" @click="requestHistory(teamIndex)">全履歴 {{ team.guesses.length }}件</button>
+            </div>
           </header>
 
           <div class="display-answer">
@@ -86,7 +89,7 @@
               <span>FULL HISTORY</span>
               <h2>{{ historyTeam.name }}への予想 全{{ historyTeam.guesses.length }}件</h2>
             </div>
-            <small>操作用画面から閉じられます</small>
+            <button type="button" class="display-history-close" @click="requestHistory(null)">✕ 閉じる</button>
           </header>
           <p v-if="historyTeam.guesses.length === 0" class="display-history-empty">まだ予想履歴はありません。</p>
           <div v-else class="display-history-list">
@@ -138,7 +141,12 @@ const phaseInstruction = computed(() => {
 
 onMounted(() => {
   window.addEventListener('storage', handleStorage)
-  if (displayChannel) displayChannel.onmessage = event => applyDisplayState(event.data)
+  if (displayChannel) {
+    displayChannel.onmessage = event => {
+      if (event.data?.type === 'history-request') return
+      applyDisplayState(event.data)
+    }
+  }
 })
 
 onUnmounted(() => {
@@ -213,6 +221,11 @@ function displayAnswer(team) {
 function challengerName(challengerId) {
   return state.teams.find(team => team.id === challengerId)?.name || '相手チーム'
 }
+
+function requestHistory(teamIndex) {
+  state.displayHistoryTeamIndex = Number.isInteger(teamIndex) && state.teams[teamIndex] ? teamIndex : null
+  displayChannel?.postMessage({ type: 'history-request', teamIndex: state.displayHistoryTeamIndex })
+}
 </script>
 
 <style scoped>
@@ -246,6 +259,9 @@ function challengerName(challengerId) {
 .display-board > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .display-board > header span { color: var(--team); font-size: .72rem; font-weight: 900; letter-spacing: .1em; }
 .display-board h2 { margin: 2px 0; font-size: clamp(1.3rem, 2.5vw, 2rem); }
+.display-board__actions { display: grid; justify-items: end; gap: 5px; }
+.display-board__actions button, .display-history-close { min-height: 30px; padding: 4px 9px; border: 1px solid #78909c; border-radius: 7px; background: #182126; color: #fff; font: inherit; font-size: .68rem; font-weight: 900; cursor: pointer; }
+.display-board__actions button:hover, .display-history-close:hover { border-color: #ffd54f; }
 .status { padding: 5px 9px; border: 1px solid #607d8b; border-radius: 99px; color: #b0bec5; font-size: .7rem; }
 .status.out { border-color: #ef5350; color: #ff8a80; }
 .status.winner { border-color: #ffd54f; background: #5d4500; color: #fff7c2; }
@@ -266,7 +282,6 @@ function challengerName(challengerId) {
 .display-history-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
 .display-history-panel > header span { color: var(--team); font-size: .75rem; font-weight: 900; letter-spacing: .15em; }
 .display-history-panel h2 { margin: 2px 0; font-size: 2rem; }
-.display-history-panel > header small { color: #90a4ae; }
 .display-history-list { min-height: 0; display: grid; gap: 10px; overflow-y: auto; }
 .display-history-entry { display: grid; grid-template-columns: 44px 130px minmax(0, 1fr); align-items: center; gap: 10px; }
 .display-history-entry > strong { color: #ffd54f; text-align: right; }
