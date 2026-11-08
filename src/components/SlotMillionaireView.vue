@@ -34,11 +34,13 @@
       <h2>使い方ガイド</h2>
       <ol>
         <li>開始時に全チームが1回ずつスロットを回します。</li>
+        <li>各ラウンドの開始前に出題内容スロットを回し、その10問の難易度・ジャンル・出題形式を決めます。</li>
         <li>1ラウンド10問。正解したチームのクレジットコインが1枚増え、スルーした問題は没収ポットへ1枚入ります。</li>
         <li>10問終了後、獲得したクレジットの回数だけチームごとにスピンします。スピン開始時にコインを1枚消費します。</li>
         <li>全チームのスピン後、低VP順に3枚組の育成カードセットを選びます。</li>
-        <li>相談時間の目安を見ながらナンバー・強化・倍率カードでスロットを育て、準備ができたら手動で次の10問へ進みます。</li>
+        <li>相談時間の目安を見ながらナンバー・強化・倍率カードでスロットを育て、準備ができたら手動で次の出題内容スロットへ進みます。</li>
       </ol>
+      <p>出題内容スロットは3リールです。対戦設定で各リールの見出しと候補を1行ずつ登録でき、決まった内容はそのラウンドの10問が終わるまで表示されます。</p>
       <p>妨害カードはありません。有効ラインで同じ数字が3個揃うと「数字×ライン倍率」のVPを獲得します。1/2カードはラインごとに1または2として扱えます。</p>
       <p>2〜4チームで対戦できます。PCではスピン中のチームを中央に大きく、全チームの小型盤面を左右へ最大2チームずつ表示します。狭い画面では操作中のチームだけを表示します。</p>
       <p>強化カードは効果とレベルを色分けバッジで表示します。リスクリターンは使用せず、標準でリムーブ7枚と最大2枚を除外するダブルリムーブ2枚が入ります。3（+1VP）は水色、3（+2VP）は紫色に光り、ライン成立とは別の出現VPだと分かります。</p>
@@ -85,6 +87,26 @@
           <input v-model.trim="setup.names[index]" maxlength="12" :placeholder="`チーム${index + 1}`" />
         </label>
       </div>
+      <details class="question-slot-config" open>
+        <summary>出題内容スロット設定 <strong>3リール</strong></summary>
+        <p>各リールの見出しと候補を設定します。候補は1行に1つ入力してください。</p>
+        <div class="question-reel-configs">
+          <section v-for="(reel, index) in setup.questionReels" :key="index" class="question-reel-config">
+            <label>
+              <span>リール{{ index + 1 }}の見出し</span>
+              <input v-model.trim="reel.label" maxlength="12" :aria-label="`出題内容リール${index + 1}の見出し`" />
+            </label>
+            <label>
+              <span>候補（1行に1つ）</span>
+              <textarea v-model="reel.itemsText" rows="5" maxlength="500" :aria-label="`出題内容リール${index + 1}の候補`"></textarea>
+            </label>
+            <small>{{ questionReelSetupItems(reel).length }}候補</small>
+          </section>
+        </div>
+        <div class="question-slot-config__actions">
+          <button type="button" class="secondary" @click="resetQuestionReels">標準設定に戻す</button>
+        </div>
+      </details>
       <details class="card-config">
         <summary>共有カード枚数 <strong>全{{ setupCardTotal }}枚</strong></summary>
         <p>カードドラフトで使う共有山札です。各0〜99枚で設定できます。</p>
@@ -162,9 +184,38 @@
         </article>
       </section>
 
+      <section v-if="state.phase === 'question-slot'" class="question-slot panel action-panel" aria-live="polite">
+        <p class="quiz-kicker">ROUND {{ state.roundNumber }} · QUESTION SELECT</p>
+        <h2>この10問の出題内容を決定</h2>
+        <p>3つのリールを回して、ラウンド中に出す問題の条件を決めます。</p>
+        <div class="question-slot-reels" :class="{ spinning: questionSlotSpinning }">
+          <article v-for="(reel, index) in state.questionReels" :key="reel.id || index" class="question-slot-reel">
+            <small>{{ reel.label }}</small>
+            <strong>{{ questionSlotDisplay[index] || '？' }}</strong>
+          </article>
+        </div>
+        <button
+          v-if="!hasQuestionSlotResult"
+          class="primary question-slot-spin-button"
+          :disabled="questionSlotSpinning"
+          @click="spinQuestionSlot"
+        >{{ questionSlotSpinning ? '抽選中…' : '🎰 出題内容を決める' }}</button>
+        <div v-else class="question-slot-actions">
+          <button class="primary" @click="confirmQuestionSlot">この内容で10問開始</button>
+          <button class="secondary" @click="spinQuestionSlot">もう一度回す</button>
+        </div>
+        <small>Enter・Space・外部ボタンでも「回す → 10問開始」を進められます。</small>
+      </section>
+
       <section v-if="state.phase === 'quiz'" class="quiz-console panel">
         <p class="quiz-kicker">ROUND {{ state.roundNumber }} · QUESTION {{ state.questionInRound + 1 }}</p>
         <h2>正解したチームを記録</h2>
+        <div v-if="state.questionSlotResult.length" class="question-theme-summary" aria-label="このラウンドの出題内容">
+          <span v-for="(value, index) in state.questionSlotResult" :key="`${index}-${value}`">
+            <small>{{ state.questionReels[index]?.label }}</small>
+            <strong>{{ value }}</strong>
+          </span>
+        </div>
         <div class="quiz-buttons">
           <button
             v-for="(team, index) in state.teams"
@@ -217,7 +268,7 @@
         </div>
         <p v-if="customizeRemaining > 0">各チームで相談し、所持カードを使ってください。未使用カードは次ラウンドへ持ち越せます。</p>
         <p v-else class="timer-over">目安時間になりました。相談とカード操作はそのまま続けられます。</p>
-        <button class="primary next-round-button" @click="finishCustomize">育成を終了して次の10問へ</button>
+        <button class="primary next-round-button" @click="finishCustomize">育成を終了して出題内容スロットへ</button>
       </section>
 
       <section class="teams" :class="{ 'teams--focus': state.activeTeamIndex !== null }">
@@ -523,6 +574,11 @@ const BGM_BASE_BPM = 120
 const BGM_MAX_BPM = 165
 const BGM_ROUND_BONUS = 5
 const BGM_FINAL_STRETCH_BONUS = 10
+const DEFAULT_QUESTION_REELS = Object.freeze([
+  { id: 'difficulty', label: '難易度', items: ['初級', '中級', '上級'] },
+  { id: 'genre', label: 'ジャンル', items: ['ノンジャンル', '芸能・音楽', 'スポーツ', 'アニメ・ゲーム', '学問・一般常識'] },
+  { id: 'format', label: '出題形式', items: ['通常問題', 'イントロ', '画像問題'] },
+])
 const DEFAULT_CARD_COUNTS = Object.freeze({
   wild12: 8,
   '3p1': 8,
@@ -586,6 +642,7 @@ const TRANSFORM_ABILITY_META = {
 }
 const PHASE_LABELS = {
   'initial-spin': '初回スロット',
+  'question-slot': '出題決定',
   quiz: 'クイズ',
   'spin-turn': 'スロット',
   rolling: '回転中',
@@ -601,6 +658,7 @@ const setup = reactive({
   targetVp: 100,
   customizeSeconds: 90,
   names: ['オレンジ', 'ブルー', 'レッド', 'グリーン'],
+  questionReels: questionReelsToSetup(DEFAULT_QUESTION_REELS),
   cardCounts: { ...DEFAULT_CARD_COUNTS },
 })
 const showGuide = ref(false)
@@ -617,7 +675,11 @@ const pendingUse = ref(null)
 const bgmPlaying = ref(false)
 const bgmBpm = ref(BGM_BASE_BPM)
 const sfxEnabled = ref(true)
+const questionSlotSpinning = ref(false)
+const questionSlotDisplay = ref([])
 let spinRunId = 0
+let questionSlotRunId = 0
+let questionSlotTimers = []
 let customizeTimer = null
 let audioContext = null
 let bgmTimer = null
@@ -630,6 +692,8 @@ const gamepadButtonStates = new Map()
 const saved = loadSaved()
 const hasSave = ref(Boolean(saved))
 const state = reactive(saved || emptyState())
+if (saved?.questionReels) setup.questionReels = questionReelsToSetup(saved.questionReels)
+questionSlotDisplay.value = [...(state.questionSlotResult || [])]
 
 const phaseLabel = computed(() => activeTransformation.value ? '強化発動' : (PHASE_LABELS[state.phase] || state.phase))
 const phaseInstruction = computed(() => {
@@ -637,6 +701,10 @@ const phaseInstruction = computed(() => {
   if (activeTransformation.value) {
     const change = activeTransformation.value
     return `${change.icon} ${change.label}：${change.beforeLabel} → ${change.afterLabel}`
+  }
+  if (state.phase === 'question-slot') {
+    if (questionSlotSpinning.value) return '出題内容スロットの回転中'
+    return hasQuestionSlotResult.value ? '結果を確認して10問を開始する' : '出題内容スロットを回す'
   }
   if (state.phase === 'quiz') return `Q${state.questionInRound + 1}の正解チームを押す`
   if (state.phase === 'spin-turn') return `${activeTeam?.name || '対象チーム'}がスロットを回す`
@@ -660,6 +728,11 @@ const rightFocusTeams = computed(() => focusTeamEntries.value.slice(focusTeamSpl
 const activeCardCounts = computed(() => state.phase === 'setup' ? setup.cardCounts : state.cardCounts)
 const setupCardTotal = computed(() => cardCountTotal(setup.cardCounts))
 const activeCardTotal = computed(() => cardCountTotal(activeCardCounts.value))
+const hasQuestionSlotResult = computed(() => (
+  state.questionReels.length > 0
+  && state.questionSlotResult.length === state.questionReels.length
+  && state.questionSlotResult.every(value => Boolean(String(value || '').trim()))
+))
 const targetBgmBpm = computed(() => {
   const highestVp = Math.max(0, ...state.teams.map(team => Number(team.vp) || 0))
   const finalStretch = state.targetVp > 0 && highestVp >= state.targetVp * 0.8 ? BGM_FINAL_STRETCH_BONUS : 0
@@ -697,6 +770,12 @@ function scorePolyline(teamIndex) {
 
 function triggerSpinAction() {
   if (showScoreChart.value) return
+  if (state.phase === 'question-slot') {
+    if (questionSlotSpinning.value) return
+    if (hasQuestionSlotResult.value) confirmQuestionSlot()
+    else spinQuestionSlot()
+    return
+  }
   const teamIndex = state.activeTeamIndex
   if (!Number.isInteger(teamIndex)) return
   if (state.phase === 'spin-turn') spinOnce(teamIndex)
@@ -711,7 +790,7 @@ function handleSpinShortcut(event) {
   if (showScoreChart.value) return
   if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
   const isSpinKey = event.key === 'Enter' || event.key === ' ' || event.code === 'Space'
-  if (!isSpinKey || !['spin-turn', 'spin-result'].includes(state.phase)) return
+  if (!isSpinKey || !['question-slot', 'spin-turn', 'spin-result'].includes(state.phase)) return
   const target = event.target
   if (target instanceof Element && target.closest('input, textarea, select, button, a, [contenteditable="true"]')) return
   event.preventDefault()
@@ -746,7 +825,7 @@ watch(() => state.phase, phase => {
 
 function emptyState() {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     phase: 'setup',
     targetVp: 100,
     customizeSeconds: 90,
@@ -756,6 +835,8 @@ function emptyState() {
     questionInRound: 0,
     questionCount: 0,
     roundPasses: 0,
+    questionReels: normalizeQuestionReels(DEFAULT_QUESTION_REELS),
+    questionSlotResult: [],
     activeTeamIndex: null,
     teams: [],
     cardCounts: { ...DEFAULT_CARD_COUNTS },
@@ -839,7 +920,7 @@ function buildCardPool(cardCounts = DEFAULT_CARD_COUNTS) {
 
   addCopies(counts.remove, () => makeCard('upgrade', 'remove', 'リムーブ', '数字カードを1枚除外（最低10枚）'))
   addCopies(counts.doubleRemove, () => makeCard('upgrade', 'doubleRemove', 'ダブルリムーブ', '数字カードを最大2枚除外（最低10枚）'))
-  addCopies(counts.oneTwoBeat, () => makeCard('upgrade', 'oneTwoBeat', 'ワンツービート', '1・2・1/2が2枚出るごとに、レベル分のVPを加算'))
+  addCopies(counts.oneTwoBeat, () => makeCard('upgrade', 'oneTwoBeat', 'ワンツービート', '1・2・1/2が3枚出るごとに、レベル分のVPを加算'))
   addCopies(counts.luckyNumber, () => makeCard('upgrade', 'luckyNumber', 'ラッキーナンバー', '得点が最大になる1マスを自動で7に変更'))
   addCopies(counts.bigNumber, () => makeCard('upgrade', 'bigNumber', 'ビッグナンバー', '得点が最大になる1マスを自動で+1'))
   addCopies(counts.smallNumber, () => makeCard('upgrade', 'smallNumber', 'スモールナンバー', '得点が最大になる1マスを自動で-1/-2'))
@@ -867,7 +948,7 @@ function loadSaved() {
 function migrateState(value) {
   const previousSchemaVersion = Number(value.schemaVersion) || 1
   const hadCardPool = Array.isArray(value.cardPool)
-  value.schemaVersion = 7
+  value.schemaVersion = 8
   value.targetVp ||= 100
   value.customizeSeconds ||= 90
   value.bgmVolume = normalizeAudioVolume(value.bgmVolume)
@@ -876,6 +957,8 @@ function migrateState(value) {
   value.questionInRound ||= 0
   value.questionCount ||= 0
   value.roundPasses = Math.max(0, Number(value.roundPasses) || 0)
+  value.questionReels = normalizeQuestionReels(value.questionReels)
+  value.questionSlotResult = normalizeQuestionSlotResult(value.questionSlotResult, value.questionReels)
   value.cardCounts = normalizeCardCounts(value.cardCounts)
   value.cardPool ||= buildCardPool(value.cardCounts)
   if (previousSchemaVersion < 5 && hadCardPool) {
@@ -901,7 +984,7 @@ function migrateState(value) {
   })
 
   const oldPhases = ['action', 'result', 'upgrade', 'attack', 'attack-type']
-  if (value.phase === 'rolling' || oldPhases.includes(value.phase)) value.phase = 'quiz'
+  if (value.phase === 'rolling' || value.phase === 'question-slot-rolling' || oldPhases.includes(value.phase)) value.phase = 'quiz'
 
   value.teams.forEach((team, teamIndex) => {
     team.color ||= COLORS[teamIndex]
@@ -967,7 +1050,7 @@ function normalizeGrowthCards(cards) {
       if (card?.key === 'oneTwoBeat') {
         return {
           ...card,
-          description: '1・2・1/2が2枚出るごとに、レベル分のVPを加算',
+          description: '1・2・1/2が3枚出るごとに、レベル分のVPを加算',
         }
       }
       return card
@@ -991,6 +1074,57 @@ function normalizeNumberCard(card, fallbackId) {
   const value = Number(card)
   if (!Number.isFinite(value)) return null
   return { uid: `${fallbackId}-${nextUid()}`, key: String(value), value, bonus: 0, label: String(value), basic: true }
+}
+
+function questionReelSetupItems(reel) {
+  return [...new Set(String(reel?.itemsText || '')
+    .split(/\r?\n/)
+    .map(item => item.trim())
+    .filter(Boolean))]
+    .slice(0, 30)
+}
+
+function normalizeQuestionReels(reels) {
+  const source = Array.isArray(reels) ? reels : DEFAULT_QUESTION_REELS
+  return DEFAULT_QUESTION_REELS.map((fallback, index) => {
+    const candidate = source[index] || fallback
+    const rawItems = Array.isArray(candidate.items) ? candidate.items : fallback.items
+    const items = [...new Set(rawItems
+      .map(item => String(item || '').trim().slice(0, 30))
+      .filter(Boolean))]
+      .slice(0, 30)
+    return {
+      id: fallback.id,
+      label: String(candidate.label || '').trim().slice(0, 12) || fallback.label,
+      items: items.length ? items : [...fallback.items],
+    }
+  })
+}
+
+function questionReelsToSetup(reels) {
+  return normalizeQuestionReels(reels).map(reel => ({
+    id: reel.id,
+    label: reel.label,
+    itemsText: reel.items.join('\n'),
+  }))
+}
+
+function questionReelsFromSetup() {
+  return normalizeQuestionReels(setup.questionReels.map((reel, index) => ({
+    id: DEFAULT_QUESTION_REELS[index].id,
+    label: reel.label,
+    items: questionReelSetupItems(reel),
+  })))
+}
+
+function normalizeQuestionSlotResult(result, reels) {
+  if (!Array.isArray(result) || result.length !== reels.length) return []
+  const values = result.map(value => String(value || '').trim().slice(0, 30))
+  return values.every((value, index) => value && reels[index].items.includes(value)) ? values : []
+}
+
+function resetQuestionReels() {
+  setup.questionReels = questionReelsToSetup(DEFAULT_QUESTION_REELS)
 }
 
 function normalizeCardCounts(cardCounts) {
@@ -1039,7 +1173,9 @@ function undo() {
   const previous = history.pop()
   if (!previous) return
   clearTransformationDisplay()
+  clearQuestionSlotAnimation()
   Object.assign(state, JSON.parse(previous))
+  questionSlotDisplay.value = [...(state.questionSlotResult || [])]
   pendingUse.value = null
 }
 
@@ -1047,6 +1183,10 @@ function startGame() {
   setupError.value = ''
   const names = setup.names.slice(0, setup.teamCount).map(name => name.trim())
   const targetVp = Number(setup.targetVp)
+  const questionReelsAreValid = setup.questionReels.length === 3 && setup.questionReels.every(reel => (
+    Boolean(String(reel.label || '').trim()) && questionReelSetupItems(reel).length > 0
+  ))
+  const questionReels = questionReelsFromSetup()
   const cardCountsAreValid = cardConfigItems.every(item => {
     if (setup.cardCounts[item.key] === '') return false
     const count = Number(setup.cardCounts[item.key])
@@ -1069,6 +1209,10 @@ function startGame() {
     setupError.value = 'チーム名はそれぞれ異なる名前にしてください。'
     return
   }
+  if (!questionReelsAreValid) {
+    setupError.value = '出題内容スロットは、3リールすべてに見出しと1つ以上の候補を入力してください。'
+    return
+  }
   if (!cardCountsAreValid) {
     setupError.value = 'カード枚数はすべて0〜99の整数で入力してください。'
     return
@@ -1080,6 +1224,7 @@ function startGame() {
   }
 
   clearTransformationDisplay()
+  clearQuestionSlotAnimation()
   bgmBpm.value = BGM_BASE_BPM
   Object.assign(state, {
     ...emptyState(),
@@ -1088,6 +1233,8 @@ function startGame() {
     customizeSeconds: setup.customizeSeconds,
     ...audioSettings,
     teams: names.map(makeTeam),
+    questionReels,
+    questionSlotResult: [],
     cardCounts,
     cardPool: buildCardPool(cardCounts),
     spinOrder: names.map((_, index) => index),
@@ -1110,7 +1257,10 @@ function resumeGame() {
   const value = loadSaved()
   if (value) {
     clearTransformationDisplay()
+    clearQuestionSlotAnimation()
     Object.assign(state, value)
+    setup.questionReels = questionReelsToSetup(value.questionReels)
+    questionSlotDisplay.value = [...value.questionSlotResult]
     bgmBpm.value = targetBgmBpm.value
   }
 }
@@ -1227,16 +1377,19 @@ function finishSpinPhase() {
     return
   }
   if (state.spinContext === 'initial') {
-    beginQuizRound()
+    beginQuestionSlotRound()
     return
   }
   beginDraft()
 }
 
-function beginQuizRound() {
+function beginQuestionSlotRound() {
+  clearQuestionSlotAnimation()
   state.roundNumber++
   state.questionInRound = 0
   state.roundPasses = 0
+  state.questionSlotResult = []
+  questionSlotDisplay.value = []
   state.activeTeamIndex = null
   state.spinContext = null
   state.teams.forEach(team => {
@@ -1244,8 +1397,58 @@ function beginQuizRound() {
     team.spinRights = 0
     team.spinRightsRemaining = 0
   })
+  state.phase = 'question-slot'
+  addLog(`ラウンド${state.roundNumber}の出題内容スロットを開始。`)
+}
+
+async function spinQuestionSlot() {
+  if (state.phase !== 'question-slot' || questionSlotSpinning.value) return
+  snapshot()
+  const finalValues = state.questionReels.map(reel => reel.items[Math.floor(Math.random() * reel.items.length)])
+  const runId = ++questionSlotRunId
+  state.questionSlotResult = []
+  questionSlotDisplay.value = state.questionReels.map(reel => reel.items[0] || '？')
+  questionSlotSpinning.value = true
+  playSpinStartSfx()
+  startReelSound()
+  questionSlotTimers = state.questionReels.map((reel, index) => window.setInterval(() => {
+    const items = reel.items
+    questionSlotDisplay.value[index] = items[Math.floor(Math.random() * items.length)] || '？'
+  }, 65 + index * 18))
+
+  for (let index = 0; index < state.questionReels.length; index++) {
+    await wait(index === 0 ? 700 : 420)
+    if (runId !== questionSlotRunId) return
+    window.clearInterval(questionSlotTimers[index])
+    questionSlotDisplay.value[index] = finalValues[index]
+    playReelStopSfx(index)
+  }
+
+  stopQuestionSlotTimers()
+  stopReelSound()
+  if (runId !== questionSlotRunId) return
+  state.questionSlotResult = finalValues
+  questionSlotSpinning.value = false
+  addLog(`出題内容：${state.questionReels.map((reel, index) => `${reel.label}「${finalValues[index]}」`).join('／')}`)
+}
+
+function confirmQuestionSlot() {
+  if (state.phase !== 'question-slot' || questionSlotSpinning.value || !hasQuestionSlotResult.value) return
+  snapshot()
   state.phase = 'quiz'
-  addLog(`ラウンド${state.roundNumber}のクイズ10問を開始。`)
+  addLog(`ラウンド${state.roundNumber}のクイズ10問を開始（${state.questionSlotResult.join('／')}）。`)
+}
+
+function stopQuestionSlotTimers() {
+  questionSlotTimers.forEach(timer => window.clearInterval(timer))
+  questionSlotTimers = []
+}
+
+function clearQuestionSlotAnimation() {
+  questionSlotRunId++
+  stopQuestionSlotTimers()
+  questionSlotSpinning.value = false
+  questionSlotDisplay.value = [...(state.questionSlotResult || [])]
 }
 
 function beginDraft() {
@@ -1314,10 +1517,10 @@ function stopCustomizeTimer() {
 }
 
 function finishCustomize() {
-  if (!window.confirm('改造フェイズを終了して次の10問へ進みますか？')) return
+  if (!window.confirm('改造フェイズを終了して、次の出題内容スロットへ進みますか？')) return
   snapshot()
   pendingUse.value = null
-  beginQuizRound()
+  beginQuestionSlotRound()
 }
 
 function useCard(teamIndex, cardUid) {
@@ -1479,7 +1682,7 @@ function calculateSpin(team, originalReels) {
 
   const lineResult = scoreReels(team, reels)
   const oneTwoCount = originalReels.filter(card => card?.key === 'wild12' || card?.value === 1 || card?.value === 2).length
-  const oneTwoBonus = Math.floor(oneTwoCount / 2) * (team.abilities.oneTwoBeat || 0)
+  const oneTwoBonus = Math.floor(oneTwoCount / 3) * (team.abilities.oneTwoBeat || 0)
   const points = lineResult.points + originalBonus + oneTwoBonus
 
   if (originalBonus) notes.push(`出現+${originalBonus}`)
@@ -1619,8 +1822,8 @@ function abilityBadges(team) {
       key: 'oneTwoBeat',
       icon: '1·2',
       label: 'ワンツー',
-      effect: `2枚ごと+${abilities.oneTwoBeat || 0}VP`,
-      title: '1・2・1/2が2枚出るごとに、レベルと同じVPを獲得',
+      effect: `3枚ごと+${abilities.oneTwoBeat || 0}VP`,
+      title: '1・2・1/2が3枚出るごとに、レベルと同じVPを獲得',
     },
     {
       key: 'luckyNumber',
@@ -1888,7 +2091,9 @@ function confirmReset() {
     bgmVolume: normalizeAudioVolume(state.bgmVolume),
     sfxVolume: normalizeAudioVolume(state.sfxVolume),
   }
+  setup.questionReels = questionReelsToSetup(state.questionReels)
   clearTransformationDisplay()
+  clearQuestionSlotAnimation()
   bgmBpm.value = BGM_BASE_BPM
   localStorage.removeItem(STORAGE_KEY)
   history.splice(0)
@@ -1899,7 +2104,7 @@ function confirmReset() {
 }
 
 function downloadBackup() {
-  const blob = new Blob([JSON.stringify({ app: 'custom-slot-millionaire', version: 7, state }, null, 2)], { type: 'application/json' })
+  const blob = new Blob([JSON.stringify({ app: 'custom-slot-millionaire', version: 8, state }, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -1916,7 +2121,10 @@ async function restoreBackup(event) {
     snapshot()
     migrateState(json.state)
     clearTransformationDisplay()
+    clearQuestionSlotAnimation()
     Object.assign(state, json.state)
+    setup.questionReels = questionReelsToSetup(json.state.questionReels)
+    questionSlotDisplay.value = [...json.state.questionSlotResult]
   } catch {
     dataError.value = 'このファイルは復元できません。正しいバックアップJSONを選んでください。'
   } finally {
@@ -1934,6 +2142,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   spinRunId++
+  clearQuestionSlotAnimation()
   window.removeEventListener('keydown', handleSpinShortcut)
   window.removeEventListener('custom-slot-spin', triggerSpinAction)
   window.removeEventListener('gamepadconnected', startGamepadPolling)
@@ -1972,7 +2181,7 @@ onUnmounted(() => {
 .card-count-help > strong { width: 100%; color: #ffd54f; }
 .card-count-help span { padding: 4px 8px; border-radius: 99px; background: #33281e; color: #e8ddd5; font-size: .78rem; }
 .card-count-help b { color: #fff; }
-.setup { max-width: 560px; display: grid; gap: 14px; }
+.setup { max-width: 960px; display: grid; gap: 14px; }
 .setup h2, .quiz-console h2, .draft h2, .customize h2 { margin: 0; color: #ffd54f; }
 .choice-row, .setup-actions, .data-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .target-vp-field { display: grid; gap: 5px; color: #bcaaa4; }
@@ -1989,6 +2198,16 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .team-inputs { display: grid; gap: 10px; }
 .team-inputs label { display: grid; gap: 5px; color: #bcaaa4; }
 .team-inputs input { padding: 11px; border: 1px solid #5d4037; border-radius: 8px; background: #1d1712; color: #fff; font-size: 1rem; }
+.question-slot-config { padding: 12px; border: 1px solid #7a5a24; border-radius: 10px; background: #18130f; }
+.question-slot-config summary { display: flex; justify-content: space-between; gap: 12px; color: #ffd54f; cursor: pointer; font-weight: 900; }
+.question-slot-config > p { color: #bcaaa4; font-size: .82rem; }
+.question-reel-configs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.question-reel-config { min-width: 0; display: grid; gap: 8px; padding: 10px; border: 1px solid #51443b; border-radius: 10px; background: #251d17; }
+.question-reel-config label { min-width: 0; display: grid; gap: 5px; color: #e5d5ca; font-size: .78rem; font-weight: 800; }
+.question-reel-config input, .question-reel-config textarea { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #806a5d; border-radius: 7px; background: #100d0b; color: #fff; font: inherit; }
+.question-reel-config textarea { resize: vertical; line-height: 1.5; }
+.question-reel-config small { color: #ffd180; font-weight: 800; }
+.question-slot-config__actions { margin-top: 10px; }
 .card-config { padding: 12px; border: 1px solid #5d4037; border-radius: 10px; background: #18130f; }
 .card-config summary { display: flex; justify-content: space-between; gap: 12px; color: #ffd54f; cursor: pointer; font-weight: 900; }
 .card-config > p { color: #bcaaa4; font-size: .8rem; }
@@ -2023,6 +2242,22 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 .confiscated-coins small { color: #755e59; font-size: .68rem; font-weight: 900; }
 .confiscated-coin { width: 24px; height: 24px; display: grid; flex: 0 0 24px; place-items: center; border: 2px solid #9e7770; border-radius: 50%; background: radial-gradient(circle at 35% 28%, #e3cdc8 0 8%, #8b6660 38%, #3d2926 78%); color: #291715; font-size: .75rem; font-weight: 1000; box-shadow: inset 0 0 0 2px rgba(30,10,8,.3), 0 2px 4px rgba(0,0,0,.5); }
 .confiscated-coin-enter-active { animation: confiscated-in .48s cubic-bezier(.22,1.2,.35,1); }
+.question-slot { display: grid; justify-items: center; gap: 10px; text-align: center; background: radial-gradient(circle at top, #523300, #17110a 62%); }
+.question-slot h2 { margin: 0; color: #ffd54f; }
+.question-slot > p { margin: 0; color: #e5d4c7; }
+.question-slot-reels { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 8px 0; }
+.question-slot-reel { min-width: 0; display: grid; gap: 8px; padding: 12px; border: 3px solid #8d6e63; border-radius: 14px; background: linear-gradient(180deg, #fffdf7, #e7ddd3); color: #29180d; box-shadow: inset 0 0 20px rgba(92,53,20,.2), 0 5px 16px rgba(0,0,0,.35); }
+.question-slot-reel small { color: #6d4c41; font-size: .78rem; font-weight: 1000; letter-spacing: .1em; }
+.question-slot-reel strong { min-height: 2.7em; display: grid; place-items: center; overflow-wrap: anywhere; font-size: clamp(1.3rem, 3.4vw, 2.1rem); line-height: 1.25; }
+.question-slot-reels.spinning .question-slot-reel { border-color: #ffb300; box-shadow: inset 0 0 20px rgba(255,179,0,.18), 0 0 15px rgba(255,179,0,.5); }
+.question-slot-reels.spinning .question-slot-reel strong { animation: question-reel-roll .16s linear infinite; }
+.question-slot-spin-button { width: min(440px, 100%); min-height: 60px; font-size: 1.2rem; }
+.question-slot-actions { width: 100%; display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.question-slot-actions button { min-height: 54px; font-size: 1rem; }
+.question-theme-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.question-theme-summary span { min-width: 0; display: grid; gap: 3px; padding: 9px; border: 2px solid #795d29; border-radius: 10px; background: linear-gradient(135deg, #3d2a0b, #21180d); }
+.question-theme-summary small { color: #ffd180; font-size: .66rem; font-weight: 900; letter-spacing: .08em; }
+.question-theme-summary strong { overflow-wrap: anywhere; color: #fff; font-size: 1rem; }
 .quiz-console { text-align: center; }
 .quiz-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0; }
 .quiz-buttons button { min-height: 58px; font-size: 1rem; }
@@ -2200,8 +2435,9 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
 @keyframes ability-transform { from { transform: scale(1); filter: brightness(1); } to { transform: scale(1.08) rotate(-1deg); filter: brightness(1.25); box-shadow: 0 0 22px var(--transform-color, #fff); } }
 @keyframes credit-in { from { opacity: 0; transform: translateY(-12px) rotate(-120deg) scale(.25); } to { opacity: 1; transform: none; } }
 @keyframes confiscated-in { from { opacity: 0; transform: translateY(-34px) rotate(-180deg) scale(.3); } 65% { transform: translateY(3px) rotate(14deg) scale(1.12); } to { opacity: 1; transform: none; } }
+@keyframes question-reel-roll { 0% { transform: translateY(-3px); opacity: .72; } 50% { transform: translateY(3px); opacity: 1; } 100% { transform: translateY(-3px); opacity: .72; } }
 @media (prefers-reduced-motion: reduce) {
-  .rolling-cell, .rolling-lamp, .team-card.winner, .transforming-cell, .credit-coin-enter-active, .confiscated-coin-enter-active { animation: none; }
+  .rolling-cell, .rolling-lamp, .team-card.winner, .transforming-cell, .credit-coin-enter-active, .confiscated-coin-enter-active, .question-slot-reels.spinning .question-slot-reel strong { animation: none; }
   .reel-slip-strip { transition: none; }
   .credit-coin-leave-active { transition: none; }
   .mini-card::after, .hand-card::after { transition: none; }
@@ -2233,6 +2469,8 @@ button.selected, .primary { background: #e65100; border-color: #ffb300; font-wei
   .credit-coin { width: 18px; height: 18px; flex-basis: 18px; border-width: 1px; font-size: .52rem; }
   .pass-vault { grid-template-columns: 1fr; gap: 5px; }
   .pass-vault__heading { min-width: 0; display: flex; justify-content: space-between; }
+  .question-reel-configs, .question-slot-reels, .question-theme-summary { grid-template-columns: 1fr; }
+  .question-slot-reel strong { min-height: 2.1em; }
   .card-config__group { grid-template-columns: 1fr; }
   .team-card { padding: 13px; }
   .reels span { aspect-ratio: 1.6; }
