@@ -192,7 +192,7 @@ import SlotMillionaireView from './components/SlotMillionaireView.vue'
 import SalesEventView from './components/SalesEventView.vue'
 import SalesScoreView from './components/SalesScoreView.vue'
 
-const APP_VERSION = window.APP_VERSION || '1.34'
+const APP_VERSION = window.APP_VERSION || '1.38'
 const CHANGELOG = window.CHANGELOG || []
 
 const {
