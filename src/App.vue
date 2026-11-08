@@ -40,6 +40,12 @@
       v-else-if="currentView === 'sales-score'"
     />
 
+    <!-- クイズ連動 文字あて Wordle -->
+    <WordleView
+      v-else-if="currentView === 'wordle'"
+      @back="currentView = 'home'"
+    />
+
     <!-- コーナールール表示 -->
     <CornerRulesView
       v-else-if="currentView === 'corner'"
@@ -191,8 +197,9 @@ import SpotifyAudienceView from './components/SpotifyAudienceView.vue'
 import SlotMillionaireView from './components/SlotMillionaireView.vue'
 import SalesEventView from './components/SalesEventView.vue'
 import SalesScoreView from './components/SalesScoreView.vue'
+import WordleView from './components/WordleView.vue'
 
-const APP_VERSION = window.APP_VERSION || '1.38'
+const APP_VERSION = window.APP_VERSION || '1.39'
 const CHANGELOG = window.CHANGELOG || []
 
 const {
@@ -210,7 +217,7 @@ const {
 
 const requestedView = new URLSearchParams(window.location.search).get('view')
 const popupViews = ['announcement', 'spotify-intro', 'spotify-audience', 'sales-score']
-const directViews = [...popupViews, 'sales-event']
+const directViews = [...popupViews, 'sales-event', 'wordle']
 const isPopupWindow = popupViews.includes(requestedView)
 const currentView = ref(directViews.includes(requestedView) ? requestedView : 'home')
 
@@ -269,6 +276,10 @@ function onSelectCorner(corner) {
     }
     if (corner.gameType === 'custom-slot') {
       currentView.value = 'custom-slot'
+      return
+    }
+    if (corner.gameType === 'wordle') {
+      currentView.value = 'wordle'
       return
     }
     currentView.value = 'game'

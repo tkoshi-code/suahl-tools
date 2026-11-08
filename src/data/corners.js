@@ -222,12 +222,27 @@ export const PIYOPIYO_CORNERS = [
   },
   {
     id: 'wordle',
-    title: 'Wordle',
-    titleColor: '#546e7a',
-    icon: '🟩',
+    title: '文字あて Wordle',
+    titleColor: '#ef5350',
+    icon: '🟥',
     tags: ['チーム戦', '早押し', 'わいわい'],
-    bullets: ['準備中'],
-    comingSoon: true,
+    bullets: [
+      'クイズ正解で相手チームの秘密の5文字へチャレンジ！',
+      '赤は位置まで一致、黄は文字だけ一致',
+    ],
+    sections: [
+      {
+        label: 'ルール',
+        items: [
+          { text: '各チームは同じ文字を使わない秘密の5文字を用意します', color: '#cfd8dc' },
+          { text: 'クイズに正解したチームは、相手を選んで5文字を1回予想できます', color: '#cfd8dc' },
+          { text: '文字と場所が一致なら赤、別の場所に使われていれば黄色で表示します', color: '#cfd8dc' },
+          { text: '秘密ワードを当てられたチームは撃破。最後に残ったチームが勝利です', color: '#cfd8dc' },
+        ],
+      },
+    ],
+    isGame: true,
+    gameType: 'wordle',
   },
   {
     id: 'mouthpiece',
