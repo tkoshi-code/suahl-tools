@@ -277,11 +277,32 @@ export const PIYOPIYO_CORNERS = [
   {
     id: 'board-rush',
     title: 'ボードラッシュ',
-    titleColor: '#546e7a',
+    titleColor: '#ab47bc',
     icon: '📝',
-    tags: ['団体戦', '早押し', 'ボード', 'スリリング'],
-    bullets: ['準備中'],
-    comingSoon: true,
+    tags: ['チーム戦', '早押し', 'ボード', 'スリリング'],
+    bullets: [
+      '早押しボタンが押されたら全員で5秒ボード回答！',
+      '正解者が多いチームに1pt・Npt先取（デュースあり）',
+    ],
+    sections: [
+      {
+        label: '進行',
+        items: [
+          { text: '誰かがボタンを押したら、QMは押されたところまで問題を再読します', color: '#cfd8dc' },
+          { text: '再読後の5秒間で全員がボードへ回答し、「せーの」で一斉に出します', color: '#cfd8dc' },
+          { text: '問題を最後まで読み切った場合、その問題は無効です', color: '#e53935' },
+        ],
+      },
+      {
+        label: '勝敗',
+        items: [
+          { text: '正解者が多いチームに1pt。同数なら無得点です', color: '#43a047' },
+          { text: '設定したNpt以上かつ2pt差で勝利。1pt差ならデュースを続けます', color: '#ffd54f' },
+        ],
+      },
+    ],
+    isGame: true,
+    gameType: 'board-rush',
   },
   {
     id: 'bai-bai-board',
